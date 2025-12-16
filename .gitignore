@@ -1,6 +1,8 @@
 # Rout folder
 Rout/*
 
+Analysis_Data/*
+
 # History files
 .Rhistory
 .Rapp.history
