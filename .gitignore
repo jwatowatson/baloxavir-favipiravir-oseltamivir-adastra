@@ -1,5 +1,6 @@
 # Rout folder
 Rout/*
+*.csv
 
 # History files
 .Rhistory
