@@ -1,0 +1,859 @@
+---
+title: "Generic arm analysis"
+author: "James Watson"
+format: html
+editor: visual
+---
+
+```{r preambule}
+knitr::opts_chunk$set(cache = T, cache.comments = FALSE,
+                      echo = F, include = TRUE, 
+                      fig.width = 8, fig.height = 8,
+                      fig.pos = 'H',dev = 'png', dpi = 300)
+
+```
+
+```{r setup}
+library(conflicted)
+library(rstan)
+library(tidyverse)
+library(kableExtra)
+library(finalfit)
+library(RColorBrewer)
+library(lubridate)
+library(brms)
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+library(scales)
+library(cowplot)
+library(grid)
+library(webshot2)
+conflicts_prefer(dplyr::filter)
+
+## information on software/hardware used
+version
+sessionInfo()
+
+rstan_options(auto_write = TRUE)
+## parameters for the analysis
+Dmax = 5.5 # Number of days to analyze samples
+RUN_MODELS = T # True if want to run stan models
+add_epoch = F # if using non-concurrent controls
+
+my_probs = c(0.025, 0.1, .5, .9, .975)
+source('functions.R')
+trt_colors = get_trt_colors()
+interim_version <- 6
+```
+
+## *Load data*
+
+*Set up analysis*
+
+```{r load_data}
+intervention = 'interim_firstResults'
+
+#ref_arm = 'No Study Drug' # Success/futility
+ref_arm = 'Baloxavir' # Non-inferiority
+
+# depending on comparison with no study drug or positive control
+# will be used when plotting treatment efficacy CI wrt reference arm
+if (ref_arm == 'No Study Drug') {
+  study_threshold <- 1.2 # Test for success/futility
+} else {
+  study_threshold <- 0.9 # Test for non-inferiority
+}
+
+mITT_threshold <- 250
+use_threshold = T
+```
+
+```{r define_population}
+#| echo: false
+# set as file with relevant dataset
+f_name = here("Analysis_Data", paste0(intervention, "_analysis.csv"))
+adastra_dat = read.csv(f_name)
+adastra_dat <- adastra_dat %>% filter(Trt != 'Molnupiravir')
+adastra_dat$Rand_date = as.POSIXct(adastra_dat$Rand_date)
+adastra_dat$censor <- as.factor(adastra_dat$censor)
+trt_intervention = unique(adastra_dat$Trt)
+```
+
+```{r}
+if (length(trt_intervention) == 0) stop("No interventions!")
+
+trts <- setdiff(trt_intervention, ref_arm)  # get interventions excluding the reference arm
+```
+
+## *Make analysis data*
+
+```{r make_analysis_data}
+#| echo: false
+adastra_dat = adastra_dat %>% group_by(ID) %>%
+  mutate(
+    baseline_vl = mean(log10_viral_load[which(Timepoint_ID==0)]),
+    mITT = ifelse(use_threshold, baseline_vl > log10(mITT_threshold), T),
+    all_negative = ifelse(all(CT == 40), T, F)) 
+
+
+pop_table = adastra_dat %>% distinct(ID, .keep_all = T) %>% arrange(baseline_vl)
+print(table(Intervention=pop_table$Trt, `mITT population` = pop_table$mITT))
+```
+
+```{r}
+# Total number of patients assigned to each treatment
+print(table(Intervention=pop_table$Trt))
+```
+
+## Plot recruitment
+
+```{r timeline}
+timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluType))
+timeline
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_recruitment.png"))
+print(plot_name)
+
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+#png(plot_name, width = 800, height = 400)
+timeline
+dev.off()
+```
+
+```{r}
+mITT_plot <- plot_mITT(adastra_dat)
+mITT_plot
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_mITT_timeline.png"))
+
+png(plot_name, width = 12, height = 6, units = "in", res = 600)
+mITT_plot
+dev.off()
+```
+
+## *Baseline characteristics*
+
+In all patients
+
+```{r}
+adastra_dat = adastra_dat %>% group_by(ID, Timepoint_ID) %>%
+  mutate(daily_VL = mean(log10_viral_load),
+         daily_CT = mean(CT)) %>% 
+  ungroup() %>%
+  mutate(Site = as.factor(Site),
+         Trt = factor(Trt, levels=c(ref_arm, trts)),
+         trt_color = 
+           as.character(plyr::mapvalues(Trt,
+                                        from = names(trt_colors),
+                                        to = trt_colors)),
+         Study_time = as.numeric(difftime(Rand_date,min(Rand_date),units = 'weeks')),
+         Study_time = scale(Study_time) #normalise
+  )
+```
+
+```{r base_vl_plot}
+base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
+base_vl_plot
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
+
+png(plot_name, width = 8, height = 4, units = "in", res = 600)
+base_vl_plot
+dev.off()
+```
+
+### For all analyses
+
+```{r analysis_data}
+#| echo: false
+adastra_dat_analysis =
+  adastra_dat %>% ungroup() %>%
+  filter(Time <= Dmax, mITT) %>%
+  arrange(log10_viral_load==log10_cens_vl) %>%
+  mutate(RnaseP_scaled = scale(40 - CT_RNaseP,scale = F),
+         Mean_age = mean(Age[!duplicated(ID)]),
+         SD_age = sd(Age[!duplicated(ID)]),
+         Age_scaled = (Age-Mean_age)/SD_age)
+
+Baseline_data = adastra_dat_analysis %>% ungroup() %>% 
+  filter(Timepoint_ID==0) %>% 
+  distinct(ID, .keep_all = T) %>%
+  mutate(Baseline.viral.load = daily_VL,
+         Baseline.CT = daily_CT)
+
+tab.ff <- Baseline_data %>% 
+  summary_factorlist(
+    dependent = "Trt", # name of grouping / treatment variable
+    explanatory = c("Site", "Age", 'BMI', 'weight', 'vaccine',
+                    "Baseline.viral.load",'Sex', 'fluType' ,
+                    'symptomDay'
+    ),
+    total_col = TRUE, # add column with statistics for the whole sample
+    add_row_total = TRUE, # add column with number of valid cases
+    include_row_missing_col = FALSE,
+    add_dependent_label = T,
+    na_include = TRUE # make variables' missing data explicit
+  ) %>%
+  kbl(
+    caption = "Baseline characteristics",
+    booktabs = TRUE,
+    align = "lrlrrr",
+  ) %>%
+  kable_classic(full_width = FALSE)
+tab.ff
+# save_kable(tab.ff,file = 'Baseline_characteristics.png')
+```
+
+```{r}
+kable_path <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_Baseline_characteristics.png")
+)
+save_kable(tab.ff, file = kable_path)
+```
+
+```{r}
+Baseline_data %>%
+  #group_by(Trt) %>%
+  summarise(age_q1 = quantile(Age,0.25),
+            age_q2 = quantile(Age,0.5),
+            age_q3 = quantile(Age,0.75),
+            mean_age = mean(Age),
+            sd_age = sd(Age),
+            
+            onset_q1 = quantile(symptomDay,0.25),
+            onset_q2 = quantile(symptomDay,0.5),
+            onset_q3 = quantile(symptomDay,0.75),
+            mean_onset = mean(symptomDay) %>% round(digits = 1),
+            sd_onset = sd(symptomDay) %>% round(digits = 1)
+            
+            )
+```
+
+## Plot Baseline viral loads
+
+```{r baseline_VL}
+G_baseline_vl <- plot_baseline_vl(Baseline_data)
+G_baseline_vl
+
+fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
+
+png(fname, width = 8, height = 4, units = "in", res = 600)
+G_baseline_vl
+dev.off()
+```
+
+```{r}
+t.test(Baseline.viral.load ~ fluType, data = Baseline_data)
+```
+
+## Viral load dynamics
+
+```{r, warning=F}
+box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T)
+box_vl_flutype
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_box_vl_flutype.png"))
+
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+box_vl_flutype
+dev.off()
+```
+
+```{r box_vl, warning=F}
+box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F)
+box_vl
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_box_vl.png"))
+
+png(plot_name, width = 8, height = 4, units = "in", res = 600)
+box_vl
+dev.off()
+```
+
+## *Fit models*
+
+```{r}
+#| echo: true
+source('priors.R')
+
+# Analysis data
+writeLines(sprintf('Analysis dataset contains %s patients and %s datapoints (%s above LLOD, %s%%)',
+                   length(unique(adastra_dat_analysis$ID)),
+                   nrow(adastra_dat_analysis),
+                   sum(adastra_dat_analysis$CT<40),
+                   round(100*mean(adastra_dat_analysis$CT<40))))
+
+covs_base = c('symptomDay','fluType', 'Study_time', 'Age_scaled')
+covs_full=c(covs_base)
+
+stan_inputs <- list()
+#trt_formulas <- c("~ Trt")
+trt_formulas <- c("~ Trt", "~ Trt*fluType")
+for(i in 1:length(trt_formulas)){
+  stan_inputs[[i]] = 
+    make_stan_inputs(input_data_fit = adastra_dat_analysis,
+                     int_covs_base = covs_base,
+                     int_covs_full = covs_full,
+                     slope_covs_base = c('fluType','Study_time'),
+                     slope_covs_full = covs_full,
+                     trt_frmla = formula(trt_formulas[i]),
+                     Dmax = Dmax)
+}
+```
+
+```{r setup_models}
+all_mods = list.files('Stan_models',full.names = TRUE,pattern = '*stan')
+
+model_settings = expand.grid(mod = all_mods[2], # LinearRNA stan
+                             prior = 1,
+                             cov_matrices = 1,
+                             trt_formulas = seq_len(length(stan_inputs)))
+                             #trt_formulas = c(1,2)) #c(1,2))
+
+model_settings$Niter = 2000
+model_settings$Nwarmup = 1000
+model_settings$Nthin = 4
+model_settings$Nchain = 4
+
+writeLines(sprintf('We are running all models with %s chains and %s samples for each chain, discarding %s for burn-in and thining every %s, thus giving a total of %s posterior samples per model.',
+                   unique(model_settings$Nchain),
+                   unique(model_settings$Niter),
+                   unique(model_settings$Nwarmup),
+                   unique(model_settings$Nthin), 
+                   unique(model_settings$Nchain*(model_settings$Niter-model_settings$Nwarmup)/model_settings$Nthin)))
+
+model_setup_f_name = here("Rout", paste0('model_run_setup_',intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+save(model_settings, 
+     adastra_dat_analysis,
+     stan_inputs, 
+     all_priors,
+     file = model_setup_f_name)
+```
+
+```{r}
+library(tictoc)
+tic()  # Start timing
+
+if(RUN_MODELS){
+  system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
+}
+
+timing <- toc(log = TRUE)  # Capture timing info
+elapsed <- timing$toc - timing$tic  # Compute elapsed time
+
+cat("\n", sprintf("Total time is %.2f seconds\n", elapsed), sep = "")
+```
+
+## Model selection
+
+```{r}
+ff = list.files('Rout/', pattern = paste0(intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+ff = ff[grep(pattern = 'model_fits_',x = ff)]
+#if(!length(ff)==nrow(model_settings)) stop('not all outputs are ready for all model settings')
+ff = paste0('Rout/',ff)
+```
+
+*main model selection*
+
+```{r}
+main_mod = 1# which(model_settings$prior==2&
+#  model_settings$cov_matrices==1&
+# model_settings$mod==all_mods[2] &
+#model_settings$trt_formulas == 1)
+
+model_cols = brewer.pal(n = 8, name = 'Dark2')[1:nrow(model_settings)]
+names(model_cols) = paste('model', 1:nrow(model_settings))
+```
+
+```{r get_effects with no interactions}
+ind <- which(model_settings$trt_formulas == 1)
+
+effect_ests=list()
+for(i in ind){
+  load(ff[i])
+  effect_ests[[i]] = 
+    summary(out, pars='trt_effect',use_cache=F,probs=my_probs)$summary[,c('2.5%','10%','50%','90%','97.5%'),drop=F]
+  rownames(effect_ests[[i]]) = trts
+  names(effect_ests)[i] <- "Linear" #gsub("\\_.*", "", gsub("\\..*", "", gsub(".*/", "", model_settings$mod[i])))
+}
+
+effect_ests
+```
+
+```{r}
+# Look at key diagnostic values for each drug's treatment effect
+# n_eff = effective sample size (near 1000)
+# Rhat = convergence diagnostic (close to 1)
+# mean, sd = posterior mean and standard deviation for treatment effect
+# se_mean = Monte Carlo standard error of mean (smaller = better)
+diagnostics = summary(out, pars = "trt_effect", use_cache = FALSE)$summary[
+  , c("n_eff", "Rhat", "se_mean", "mean", "sd"), drop = FALSE
+]
+rownames(diagnostics) = trts
+
+print(diagnostics)
+```
+
+```{r}
+# Plot the traceplot
+traceplot(out, pars = "trt_effect", inc_warmup = FALSE)
+```
+
+## Plot half-life
+
+```{r}
+
+load(ff[main_mod])
+
+slopes = rstan::extract(out, pars='slope')$slope
+analysis_data_stan = stan_inputs[[model_settings$trt_formulas[main_mod]]]$analysis_data_stan
+t12_output = data.frame(t_12_med = 24*log10(.5)/apply(slopes,2,mean),
+                        t_12_up = 24*log10(.5)/apply(slopes,2,quantile,.9),
+                        t_12_low = 24*log10(.5)/apply(slopes,2,quantile,.1),
+                        slope_median = apply(slopes,2,median),
+                        ID_stan = analysis_data_stan$id[analysis_data_stan$ind_start])
+t12_output = merge(t12_output, stan_inputs[[model_settings$trt_formulas[main_mod]]]$ID_map, by = 'ID_stan')
+
+Half_life <- t12_output
+Half_life <- adastra_dat_analysis %>%
+  distinct(ID, Trt, fluType) %>%
+  merge(Half_life, by.x = "ID", by.y = "ID_key") %>%
+  arrange(Trt, t_12_med)
+
+Half_life$ID <- as.factor(Half_life$ID)
+Half_life$ID <- factor(Half_life$ID, levels = Half_life$ID)
+Half_life
+```
+
+```{r}
+Half_life %>%
+  group_by(fluType, Trt) %>%
+  summarise(med = median(t_12_med) %>% round(1),
+            q1 = quantile(t_12_med,0.25) %>% round(1),
+            q3 = quantile(t_12_med, 0.75) %>% round(1),
+            lab = paste0(Trt[1], " ", med, " h [IQR: ", q1, " to ", q3, " h]")) 
+```
+
+```{r}
+G_hl <- plot_hl(Half_life, trt_colors)
+G_hl
+```
+
+```{r}
+G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors)
+G_hl_flutype
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_hl_flutype.png"))
+
+png(plot_name, width = 8, height = 8, units = "in", res = 800)
+G_hl_flutype
+dev.off()
+```
+
+## Plot treatment effects
+
+```{r}
+G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols)
+G2
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_t12_trt.png"))
+
+png(plot_name, width = 12, height = 8, units = "in", res = 800)
+plot_grid(G_hl, G2, ncol = 2, align = "hv", axis = "b")
+dev.off()
+```
+
+```{r}
+G3 <- plot_trt_effs_2(effect_ests = effect_ests, model_cols = model_cols, -50, 40)
+G3
+```
+
+```{r}
+plot_name_pos <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_", ref_arm, ".png"))
+
+png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
+G3
+dev.off()
+```
+
+```{r}
+if(ref_arm != "No Study Drug"){
+  plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png"))
+
+png(plot_name, width = 6, height = 6, units = "in", res = 600)
+print(G2 + 
+        ggtitle(paste0("Estimated treatment effect relative to\n", tolower(ref_arm) , " arm")) 
+)
+dev.off()
+  
+  
+}
+```
+
+## Summarize treatment effect
+
+```{r}
+ind <- which(model_settings$trt_formulas == 1)
+
+for(j in ind){
+  effect_ests_rep <- effect_ests[[j]]
+  effect_ests_rep <- formatter(exp(effect_ests_rep))
+  for(i in 1:nrow(effect_ests_rep)){
+    writeLines(sprintf('%s model:\nEstimated treatment effect of %s relative to %s is %s%% [95%% CrI: %s to %s %%]\n', 
+                       names(effect_ests)[j],
+                       rownames(effect_ests_rep)[i],
+                       ref_arm,
+                       round(effect_ests_rep[i, 3],2),
+                       round(effect_ests_rep[i, 1],2),
+                       round(effect_ests_rep[i, 5],2)
+    )
+    )
+  }
+}
+```
+
+## Posterior probability for treatment efficacy comparison
+
+```{r, echo=F}
+# Define positive control arm
+pos_control <- "Favipiravir"
+
+ind <- which(model_settings$trt_formulas == 1)
+
+load(ff[ind])
+
+trt_effect <- rstan::extract(out, pars = 'trt_effect')$trt %>% as.data.frame()
+
+# Call these variables again (already declared earlier)
+# Specify posterior sampling for each treatment for all iterations
+trts <- setdiff(trt_intervention, ref_arm)
+colnames(trt_effect) = trts
+
+# Initialize an empty list to store relative effects
+rel_effect_list <- list()
+
+# Loop over each column, except the pos_control
+for (trt in setdiff(colnames(trt_effect), pos_control)) {
+  rel_effect_list[[trt]] <- trt_effect[[trt]] - trt_effect[[pos_control]]
+}
+
+# Add the negated Favipiravir as "No Study Drug"
+rel_effect_list[["No Study Drug"]] <- -trt_effect[[pos_control]]
+
+# Combine into a data frame
+trt_effects_pos_rel <- as.data.frame(rel_effect_list)
+
+# Compute quantiles for each treatment arm (column)
+effect_ests_pos_rel <- apply(trt_effects_pos_rel, 2, quantile, probs = my_probs, na.rm = TRUE)
+effect_ests_pos_rel <- as.data.frame(t(effect_ests_pos_rel))
+
+# Manually fix rowname
+rownames(effect_ests_pos_rel)[3] <- "No Study Drug"
+
+# Create plotting dataframe
+effect_ests_plot <- effect_ests_pos_rel
+effect_ests_plot <- exp(effect_ests_plot)  # exponentiate estimates
+colnames(effect_ests_plot) <- c("L95", "L80", "med", "U80", "U95")
+effect_ests_plot$arm <- rownames(effect_ests_plot)
+effect_ests_plot$arm <- factor(effect_ests_plot$arm, levels = rownames(effect_ests_plot))  # preserve order
+effect_ests_plot$model <- "Linear"
+
+# Define threshold and formatting
+pos_threshold <- 0.9
+
+# Set color manually
+model_cols <- c("Linear" = "#1b9e77")
+
+# # Define plot
+# my.labs <- levels(effect_ests_plot$arm)
+# G3 <- ggplot(effect_ests_plot, aes(x = arm, y = med, col = model, group = model)) +
+#   geom_rect(aes(ymin = 0.9, ymax = 1.1, xmin = 0, xmax = length(my.labs) + 1), 
+#           fill = "#7D7C7C", alpha = 0.2, col = NA) +
+#   geom_rect(aes(ymin = min(0.75, min(effect_ests_plot$L95)-0.05), 
+#               ymax = 0.9, xmin = 0, xmax = length(my.labs) + 1), 
+#           fill = "#D3D3D3", alpha = 0.2, col = NA) +
+#   geom_point(position = position_dodge(width = 0.5), size = 4) +
+#   geom_errorbar(aes(ymin = L95, ymax = U95),
+#                 position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
+#   geom_errorbar(aes(ymin = L80, ymax = U80),
+#                 position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
+#   geom_hline(yintercept = 1, col = "red", linetype = "dashed") +
+#   coord_flip() +
+#   theme_bw() +
+#   scale_color_manual(values = model_cols) +
+#   scale_y_continuous(limits = c(min(0.75, min(effect_ests_plot$L95) - 0.05), 
+#                                 max(effect_ests_plot$U95) + 0.25), 
+#                      expand = c(0, 0),
+#                      breaks = seq(0.2, 10, 1)) +
+#   ylab("Change in viral clearance rate (%)") +
+#   xlab("") +
+#   ggtitle(paste0("Estimated treatment effects relative to ", tolower(pos_control), " arm")) +
+#   theme(axis.title  = element_text(face = "bold"),
+#         plot.title = element_text(face = "bold"),
+#         legend.position = "bottom",
+#         axis.text = element_text(size = 20))
+# Custom label function
+percent_rel_label <- function(x) {
+  paste0(round(100 * (x - 1), 0), "%")
+}
+
+# Define plot
+my.labs <- levels(effect_ests_plot$arm)
+G3 <- ggplot(effect_ests_plot, aes(x = arm, y = med, col = model, group = model)) +
+  # Shaded bars
+  geom_rect(aes(ymin = 0.9, ymax = 1.1, xmin = 0, xmax = length(my.labs) + 1), 
+            fill = "#7D7C7C", alpha = 0.2, col = NA) +
+  geom_rect(aes(ymin = min(0.75, min(effect_ests_plot$L95)-0.05), 
+                ymax = 0.9, xmin = 0, xmax = length(my.labs) + 1), 
+            fill = "#D3D3D3", alpha = 0.2, col = NA) +
+  
+  # Points + error bars
+  geom_point(position = position_dodge(width = 0.5), size = 4) +
+  geom_errorbar(aes(ymin = L95, ymax = U95),
+                position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
+  geom_errorbar(aes(ymin = L80, ymax = U80),
+                position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
+  
+  # Reference line
+  geom_hline(yintercept = 1, col = "red", linetype = "dashed") +
+  
+  coord_flip() +
+  theme_bw() +
+  scale_color_manual(values = model_cols) +
+  scale_y_continuous(limits = c(min(0.75, min(effect_ests_plot$L95) - 0.05), 
+                     max(effect_ests_plot$U95) + 0.25), 
+                     expand = c(0, 0),
+                     breaks = c(0.9, 1.1),
+                     labels = percent_rel_label) +
+  ylab("Change in viral clearance rate (%)") +
+  xlab("") +
+  ggtitle(paste0("Estimated treatment effects relative to ", pos_control, " arm")) +
+  theme(axis.title  = element_text(face = "bold"),
+        plot.title = element_text(face = "bold"),
+        legend.position = "bottom",
+        axis.text = element_text(size = 20))
+plot_name_pos <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention,  "_mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png")
+
+png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
+G3
+dev.off()
+```
+
+```{r}
+# Initialize message list
+posterior_messages <- list()
+
+# 1. Compare each treatment vs reference (e.g., NSD)
+for (j in seq_along(trts)) {
+  prob <- mean(trt_effect[, j] > 0)
+  msg <- sprintf(
+    'Posterior probability for treatment efficacy of %s greater than %s is %.3f',
+    trts[j], ref_arm, prob
+  )
+  posterior_messages <- c(posterior_messages, msg)
+}
+
+# 2. Compare all unique pairs of treatments
+for (j in 1:(length(trts)-1)) {
+  for (k in (j+1):length(trts)) {
+    prob <- sum(trt_effect[, j] > trt_effect[, k]) / nrow(trt_effect)
+    msg <- sprintf(
+      'Posterior probability for treatment efficacy of %s greater than %s is %.3f',
+      trts[j], trts[k], prob
+    )
+    posterior_messages <- c(posterior_messages, msg)
+  }
+}
+
+# 3. Print all messages
+writeLines(unlist(posterior_messages))
+```
+
+```{r}
+# Define labels
+row_names <- c(ref_arm, trts[1:(length(trts) - 1)])
+col_names <- trts
+
+# Initialize plot list
+plot_list <- list()
+plot_idx <- 1
+
+# Row 1: trts[j] vs NSD (ref_arm)
+for (j in seq_along(trts)) {
+  diff <- trt_effect[, j]
+  prob <- mean(diff > 0)
+
+  p <- ggplot(data.frame(diff = diff), aes(x = diff)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+    #ggtitle(sprintf("Pr[%s > %s] = %.2f", trts[j], ref_arm, prob)) +
+    theme_minimal()
+
+  plot_list[[plot_idx]] <- p
+  plot_idx <- plot_idx + 1
+}
+
+# Row 2 and 3: only upper-triangle drug comparisons (k > j)
+for (j in 1:(length(trts) - 1)) {
+  for (k in 1:length(trts)) {
+    if (k <= j) {
+      # Lower triangle or diagonal: leave blank
+      plot_list[[plot_idx]] <- ggplot() + theme_void()
+    } else {
+      diff <- trt_effect[, k] - trt_effect[, j]
+      prob <- mean(diff > 0)
+
+      p <- ggplot(data.frame(diff = diff), aes(x = diff)) +
+        geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+        geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+        #ggtitle(sprintf("Pr[%s > %s] = %.2f", trts[k], trts[j], prob)) +
+        theme_minimal()
+
+      plot_list[[plot_idx]] <- p
+    }
+    plot_idx <- plot_idx + 1
+  }
+}
+
+# Ensure exactly 9 plots
+while (length(plot_list) < 9) {
+  plot_list[[length(plot_list) + 1]] <- ggplot() + theme_void()
+}
+
+posterior_plot <- grid.arrange(
+  grobs = plot_list[1:9],
+  nrow = 3, ncol = 3,
+  top = textGrob("Pr[Trtₓ > Trtᵧ | Data]", gp = gpar(fontsize = 16, fontface = "bold")),
+  left = textGrob("Trtᵧ (Comparator)", rot = 90, gp = gpar(fontsize = 12, fontface = "italic")),
+  bottom = textGrob("Trtₓ (Reference)", gp = gpar(fontsize = 12, fontface = "italic"))
+)
+
+posterior_plot
+```
+
+```{r}
+plot_name <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention, "_mITT_", mITT_threshold, "_posterior_comparison.png")
+
+png(plot_name, width = 800, height = 600)
+
+posterior_plot
+dev.off()
+
+```
+
+## Plot individual prediction
+
+```{r}
+# Select model without interaction term
+model_selects <- which(model_settings$trt_formulas == 1)
+
+ind_plot_list <- plot_inds(model_selects, Baseline_data)
+ind_plot_all <- ggarrange(plotlist =  ind_plot_list, nrow = 8, ncol = 5, common.legend = T, legend = "right")
+ind_plot_all
+```
+
+```{r}
+for(i in 1:length(ind_plot_all)){
+  fname <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention,  "_mITT_", mITT_threshold, "_individual_", i, ".pdf")
+  
+  pdf(fname, width = 12, height = 12)
+  print(annotate_figure( ind_plot_all[[i]], bottom = textGrob("Time since randomisation (days)", vjust = 0.5, gp = gpar(cex = 1.2, fontface="bold")),
+                         left = textGrob("Viral densities (genomes/mL)", rot = 90, gp = gpar(cex = 1.2, fontface="bold"))))
+  dev.off()
+  
+}
+```
+
+```{r}
+ind_obs_plot_list <- plot_inds_obs(adastra_dat, adastra_dat_analysis)
+ind_obs_plot_all <- ggarrange(plotlist =  ind_obs_plot_list, nrow = 8, ncol = 5, common.legend = T, legend = "right")
+ind_obs_plot_all
+```
+
+```{r}
+for(i in 1:length(ind_obs_plot_all)){
+  fname <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/Individual_plot_obs/", intervention,  "_mITT_", mITT_threshold, "_individual_obs_", i, ".pdf")
+  
+  pdf(fname, width = 12, height = 12)
+  print(annotate_figure( ind_obs_plot_all[[i]], bottom = textGrob("Time since randomisation (days)", vjust = 0.5, gp = gpar(cex = 1.2, fontface="bold")),
+                         left = textGrob("Viral densities (genomes/mL)", rot = 90, gp = gpar(cex = 1.2, fontface="bold"))))
+  dev.off()
+  
+}
+```
+
+## Individual data plots
+
+```{r}
+# adastra_dat %>% 
+#   group_by(Timepoint_ID, Trt, fluType) %>%
+#   summarise(avg_log_x = mean(daily_VL)) %>%
+#   ggplot(aes(x=Timepoint_ID, y=avg_log_x, color=Trt, linetype=fluType)) +
+#   geom_line() +
+#   labs(x = "Time", y = "Log 10 viral density", color = "Treatment") +
+#   theme_minimal()
+# 
+# par(las=1, family='serif')
+# plot(adastra_dat$Time, adastra_dat$log10_viral_load,
+#      pch=as.numeric(adastra_dat$censor=='left')*16+1,
+#      col = as.factor(adastra_dat$fluType),
+#      xlab='Time from randomisation (days)', ylab='log 10 viral load',
+#      panel.first=grid())
+# legend('topright', legend = unique(adastra_dat$fluType), col = unique(as.factor(adastra_dat$fluType)), pch=16)
+# 
+# summary_VL_data = adastra_dat %>% group_by(Timepoint_ID, fluType) %>%
+#   summarise(daily_VL = median(daily_VL,na.rm = T))
+# summary_A = summary_VL_data%>%filter(fluType=='A')
+# summary_B = summary_VL_data%>%filter(fluType=='B')
+# lines(summary_A$Timepoint_ID, summary_A$daily_VL)
+# lines(summary_B$Timepoint_ID, summary_B$daily_VL,col='red')
+# 
+# 
+# plot_serial_data(xx = adastra_dat %>% filter(fluType=='A'), xlims = c(0,7))
+# pdf(file = 'Individual_curves.pdf',width = 10, height = 10)
+# par(mfrow=c(3,3), mar=c(3,4,2,2),las=1, family='serif')
+# plot_individ_curves(xx = adastra_dat, 
+#                     IDs = unique(adastra_dat$ID),
+#                     xlims = range(adastra_dat$Time),
+#                     mITT_threshold = mITT_threshold)
+# dev.off()
+
+```
+
+```{r}
+ID_map = stan_inputs[[1]]$ID_map
+analysis_data_stan =  stan_inputs[[1]]$analysis_data_stan
+analysis_data_stan$trt_mat =  stan_inputs[[1]]$Treatment_matrix
+analysis_data_stan$K_trt = ncol( stan_inputs[[1]]$trt_mat)
+pdf(file = 'Individual_fits.pdf',width = 10, height = 10)
+par(mfrow=c(3,3), mar=c(3,4,2,2),las=1, family='serif')
+
+plot_data_model_fits(
+  model_list = list(mod=out),
+  models_to_plot = 1,
+  mod_cols = 'red',
+  ID_map = ID_map,
+  analysis_data_stan = analysis_data_stan)
+
+dev.off()
+```
+
+## Fever analysis
+
+```{r}
+
+```

@@ -1,0 +1,205 @@
+---
+title: "Temperature analysis AD ASTRA"
+author: "James Watson and Phrutsamon Wongnak"
+format: pdf
+editor: visual
+---
+
+```{r}
+knitr::opts_chunk$set(cache = T, cache.comments = FALSE,
+                      echo = F, include = TRUE, 
+                      fig.width = 8, fig.height = 8,
+                      fig.pos = 'H',dev = 'png', dpi = 300)
+
+```
+
+```{r}
+library(dplyr)
+library(survival)
+library(survminer)
+library(lubridate)
+library(stringr)
+library(here)
+
+source("functions.R")
+```
+
+## Setup the analysis
+
+```{r}
+intervention = 'interim_firstResults'; 
+ref_arm = 'No Study Drug'
+
+threshold <- 37
+window_clear <- 1
+```
+
+## Import data
+
+```{r}
+adastra_dat = read.csv(here('Analysis_Data', paste0(intervention,'_analysis.csv')))
+adastra_dat <- adastra_dat %>% distinct(ID, .keep_all = T)
+
+temp_dat <- read.csv(paste0('Analysis_Data/', intervention,'_fever_analysis.csv'))
+temp_dat$temp_time <-  as.POSIXlt(temp_dat$temp_time, format = "%Y-%m-%d %H:%M:%OS")
+temp_dat <- temp_dat[temp_dat$Timepoint_ID <= 8,]
+
+temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt", "Rand_date")], by.x = "Label", by.y = "ID")
+IDs <- unique(temp_dat$Label)
+
+#manual imputation
+ind_missing <- c(which(is.na(temp_dat$temp_time)))
+if(length(ind_missing) >0){temp_dat$temp_time[ind_missing] <- paste0(temp_dat$fut_dat[ind_missing], "10:00:00")}
+
+trts = unique(adastra_dat$Trt)
+trts = trts[trts!=ref_arm]
+```
+
+```{r}
+temp_dat_for_plot <- temp_dat
+temp_dat_new <- NULL
+
+for(i in 1:length(IDs)){
+  subdat <- temp_dat_for_plot[temp_dat_for_plot$Label == IDs[i],]
+  if(nrow(subdat) == 0) next
+  
+  subdat$Time_adj <- as.numeric(difftime(subdat$temp_time , min(subdat$temp_time), unit = "days"))
+
+  subdat <- subdat[order(subdat$Time_adj),]
+  subdat <- subdat %>%
+                   group_by(Timepoint_ID) %>%
+                   mutate("temp_mean" = mean(fut_temp))
+  temp_dat_new <- rbind(temp_dat_new, subdat)
+}
+```
+
+## Calculating fever clearance time
+
+```{r}
+temp_dat_for_plot <- temp_dat_new
+temp_dat_for_plot <- cal_fever_clearance(temp_dat_for_plot, threshold, window_clear)
+
+temp_dat_for_plot$rangrp <- as.factor(temp_dat_for_plot$rangrp)
+temp_dat_for_plot$rangrp <- factor(temp_dat_for_plot$rangrp, levels = c(ref_arm, trts))
+```
+
+```{r}
+temp_dat_for_plot2 <- temp_dat_for_plot[temp_dat_for_plot$Fever_Baseline == 1, ]
+temp_dat_for_plot2 <- temp_dat_for_plot2 %>%
+  group_by(Label) %>%
+  filter(row_number()==1)
+```
+
+```{r}
+fit <- survfit(Surv(clearance_time, clearance_time_cens) ~ rangrp, data = temp_dat_for_plot2) 
+diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ rangrp, data = temp_dat_for_plot2) 
+p_val <- pchisq(diff$chisq, length(diff$n)-1, lower.tail = FALSE)
+p_val
+```
+
+```{r}
+rmean_table <- summary(fit)$table %>% as.data.frame()
+rmean_table$strata <- row.names(rmean_table)
+rmean_table %>%
+  mutate(ci95_up = rmean + 1.96*`se(rmean)`,
+         ci95_low = rmean - 1.96*`se(rmean)`,
+         lab = paste0(round(rmean,1), " days [95%CI: ", round(ci95_low,1), " to ", round(ci95_up,1), " days]")) %>% select(strata, lab)
+```
+
+## Kaplan-Meier plot
+
+```{r}
+trt_colors = get_trt_colors()
+trt_colors <- trt_colors[!is.na(trt_colors)]
+#lab <- c("Baloxavir", "Favipiravir", "Oseltamivir")
+cols <- trt_colors[c(ref_arm, trts)]
+cols <- as.character(cols)
+```
+
+```{r}
+survplot <- survminer::ggsurvplot(fit,pval=F,
+                                  risk.table = T,
+                                  risk.table.y.text=F,
+                                  palette = cols,
+                                  ggtheme = theme_bw(),
+                                  legend.labs = c(ref_arm, trts),
+                                  break.time.by = 1,
+                                  #pval.size = 4,
+                                  #pval.coord = c(0,0.1),
+                                  size = 1.5,
+                                  alpha = 0.7,
+                                  xlim = c(0,7)) 
+survplot$plot <- survplot$plot + 
+  geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", col = "red", size = 0.6) +
+  xlab("Fever clearance time (days)") +
+  ylab("Proportion of patients with fever") +
+  ggtitle("A) Fever resolution") +
+  theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=13,face="bold",),
+        strip.text = element_text(size = 10, face = "bold"),
+        title = element_text(size = 13, face = "bold")
+  ) +
+  annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,1)), vjust=0, hjust = 0)
+
+
+survplot
+```
+
+```{r}
+fname <- paste0(here("Plots", intervention, "Temp_surv_plot.pdf"))
+
+pdf(fname, width = 6, height = 6)
+print(survplot, newpage = F)
+dev.off()
+```
+
+```{r}
+temp_dat_for_plot2
+
+temp_dat_for_plot2$Trt <- as.factor(temp_dat_for_plot2$Trt)
+temp_dat_for_plot2$Trt <- factor(temp_dat_for_plot2$Trt, levels = c(ref_arm, trts))
+
+coxfit <- coxph(Surv(clearance_time, clearance_time_cens) ~ Trt, data = temp_dat_for_plot2) 
+print(coxfit)
+```
+
+```{r}
+print(data.frame(exp(coxfit$coefficients) , exp(confint(coxfit))))
+```
+
+```{r}
+#Pair-wise log-rank test against reference arm
+pw_logrank_pval <- NULL
+for(i in 1:length(trts)){
+  trt_i <- trts[i]
+  temp <- temp_dat_for_plot2 %>% filter(rangrp %in% c(ref_arm, trt_i))
+  diff_i =survdiff(Surv(clearance_time, clearance_time_cens) ~ rangrp, data = temp) 
+  p_val_i <- pchisq(diff_i$chisq, length(diff_i$n)-1, lower.tail = FALSE)
+  
+  pw_logrank_pval <- rbind(pw_logrank_pval,
+                           data.frame(trt_i, ref_arm, p_val_i))
+  
+}
+
+pw_logrank_pval
+
+```
+
+```{r}
+library(gridExtra)
+survplot_fever <- survplot
+
+grob1 <- arrangeGrob(survplot_fever$plot, survplot_fever$table, ncol = 1, heights = c(2, 1))
+grob2 <- arrangeGrob(survplot$plot, survplot$table, ncol = 1, heights = c(2, 1))
+
+
+```
+
+```{r}
+fname <- paste0(here("Plots", intervention, "fever_symptom_surv_plot_7days.pdf"))
+
+pdf(fname, width = 10, height = 6)
+print(ggarrange(grob1, grob2, ncol = 2, nrow = 1))
+dev.off()
+```

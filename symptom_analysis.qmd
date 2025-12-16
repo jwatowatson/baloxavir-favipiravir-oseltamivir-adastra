@@ -1,0 +1,227 @@
+---
+title: "Symptom analysis AD ASTRA"
+author: "James Watson and Phrutsamon Wongnak"
+format: pdf
+editor: visual
+---
+
+```{r}
+knitr::opts_chunk$set(cache = T, cache.comments = FALSE,
+                      echo = F, include = TRUE, 
+                      fig.width = 8, fig.height = 8,
+                      fig.pos = 'H',dev = 'png', dpi = 300)
+
+```
+
+```{r}
+library(dplyr)
+library(survival)
+library(survminer)
+library(lubridate)
+library(stringr)
+library(here)
+
+source("functions.R")
+```
+
+## Setup the analysis
+
+```{r}
+intervention = 'interim_firstResults'; 
+ref_arm = 'No Study Drug'
+
+window_clear <- 1
+
+use_threshold <- T
+mITT_threshold <- 250
+```
+
+```{r}
+adastra_dat = read.csv(here('Analysis_Data', paste0(intervention,'_analysis.csv')))
+adastra_dat = adastra_dat %>% group_by(ID) %>%
+  mutate(
+    baseline_vl = mean(log10_viral_load[which(Timepoint_ID==0)]),
+    mITT = ifelse(use_threshold, baseline_vl > log10(mITT_threshold), T),
+    all_negative = ifelse(all(CT == 40), T, F)) 
+
+adastra_dat <- adastra_dat %>% distinct(ID, .keep_all = T)
+
+sympt_dat <- read.csv(here("Analysis_Data", paste0(intervention, "_symptom_analysis.csv")))
+
+sympt_dat <- merge(sympt_dat, adastra_dat[,c("ID","Trt", "Rand_date", "mITT")], by.x = "Label", by.y = "ID", all.y = T)
+
+
+sympt_dat <- sympt_dat %>% filter(mITT, Timepoint_ID <=7)
+
+IDs <- unique(sympt_dat$Label)
+
+trts = unique(adastra_dat$Trt)
+trts = trts[trts!=ref_arm]
+```
+
+```{r}
+yn_ind <- grep("yn", colnames(sympt_dat))
+temp <- sympt_dat[,yn_ind[-c(1, length(yn_ind))]]
+temp[is.na(temp)] <-0 
+
+sympt_dat$sq_yn <- rowSums(temp)
+sympt_dat$sq_yn[sympt_dat$sq_yn > 0] <- 1
+```
+
+```{r}
+sympt_dat_for_plot <- sympt_dat
+
+sympt_dat_for_plot <- sympt_dat_for_plot[!is.na(sympt_dat_for_plot$sq_yn),]
+sympt_dat_for_plot$sq_yn <- as.logical(sympt_dat_for_plot$sq_yn)
+
+sympt_dat_for_plot$clearance_time = NA
+# For interval censored data, the status indicator is 0=right censored, 1=event at time, 2=left censored, 3=interval censored. 
+sympt_dat_for_plot$clearance_time_cens = 1
+
+sympt_dat_for_plot$Label2 <- as.numeric(as.factor(sympt_dat_for_plot$Label))
+############################################################################################
+never_list <- NULL
+
+for(id in 1:length(unique(sympt_dat_for_plot$Label2))){
+  ind = sympt_dat_for_plot$Label2==id
+  
+  if(all(!sympt_dat_for_plot$sq_yn[ind])){ # never symptoms
+    sympt_dat_for_plot$clearance_time[ind]=0
+    never_list <- c(never_list, id)
+  } else if(all(sympt_dat_for_plot$sq_yn[ind])){ # always symptoms
+    writeLines(sprintf('all symptoms for %s with %s FUP points',id,sum(ind)))
+    sympt_dat_for_plot$clearance_time[ind] = max(sympt_dat_for_plot$Timepoint_ID[ind])
+    sympt_dat_for_plot$clearance_time_cens[ind] = 0 #censored obs
+  } else { # symptoms cleared
+    j_cleared = which(ind & !sympt_dat_for_plot$sq_yn)
+    check_ahead=F
+    for(j in j_cleared){
+      if(!check_ahead){
+        ind_check = 
+          which(ind & 
+                  sympt_dat_for_plot$Timepoint_ID>sympt_dat_for_plot$Timepoint_ID[j] &
+                  sympt_dat_for_plot$Timepoint_ID<=sympt_dat_for_plot$Timepoint_ID[j+1])
+        if(length(ind_check)>0 & all(!sympt_dat_for_plot$sq_yn[ind_check])){
+          sympt_dat_for_plot$clearance_time[ind]=sympt_dat_for_plot$Timepoint_ID[j]
+          check_ahead=T
+        }
+      }
+    }
+    if(!check_ahead){
+      sympt_dat_for_plot$clearance_time[ind]=tail(sympt_dat_for_plot$Timepoint_ID[ind],1)
+      sympt_dat_for_plot$clearance_time_cens[ind]=0
+    }
+  }
+}
+
+
+sympt_dat_for_plot$Trt <- as.factor(sympt_dat_for_plot$Trt)
+sympt_dat_for_plot$Trt <- factor(sympt_dat_for_plot$Trt, levels = c(ref_arm, trts))
+```
+
+```{r}
+sympt_dat_for_plot2 <- sympt_dat_for_plot#[sympt_dat_for_plot$symptoms_Baseline == 1, ]
+sympt_dat_for_plot2 <- sympt_dat_for_plot2 %>%
+  group_by(Label) %>%
+  filter(Timepoint_ID == 0)
+
+fit <- survfit(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
+diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
+p_val <- pchisq(diff$chisq, length(diff$n)-1, lower.tail = FALSE)
+p_val
+```
+
+```{r}
+rmean_table <- summary(fit)$table %>% as.data.frame()
+rmean_table$strata <- row.names(rmean_table)
+rmean_table %>%
+  mutate(ci95_up = rmean + 1.96*`se(rmean)`,
+         ci95_low = rmean - 1.96*`se(rmean)`,
+         lab = paste0(round(rmean,1), " days [", round(ci95_low,1), " to ", round(ci95_up,1), " days]")) %>% select(strata, lab)
+```
+
+```{r}
+round(prop.table(table(sympt_dat_for_plot2$Trt, sympt_dat_for_plot2$clearance_time), margin=1),2)
+
+round(prop.table(table(sympt_dat_for_plot2$Trt, sympt_dat_for_plot2$clearance_time_cens), margin=1),2)
+
+((table(sympt_dat_for_plot2$clearance_time_cens)))
+round(prop.table(table(sympt_dat_for_plot2$clearance_time_cens)),2)
+```
+
+```{r}
+trt_colors = get_trt_colors()
+trt_colors <- trt_colors[!is.na(trt_colors)]
+#lab <- c("Baloxavir", "Favipiravir", "Oseltamivir")
+cols <- trt_colors[c(ref_arm, trts)]
+cols <- as.character(cols)
+```
+
+```{r}
+survplot <- survminer::ggsurvplot(fit,pval=F,
+                                  risk.table = T,
+                                  risk.table.y.text=F,
+                                  palette = cols,
+                                  ggtheme = theme_bw(),
+                                  legend.labs = c(ref_arm, trts),
+                                  break.time.by = 1,
+                                 # pval.size = 4,
+                                #  pval.coord = c(0,0.1),
+                                  size = 1.5,
+                                  alpha = 0.7,
+                                  xlim = c(0,7)) 
+survplot$plot <- survplot$plot + 
+  geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", col = "red", size = 0.6) +
+  xlab("Symptom clearance time (days)") +
+  ylab("Proportion of patients with symptoms") +
+  theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=13,face="bold",),
+        strip.text = element_text(size = 10, face = "bold"),
+        title = element_text(size = 13, face = "bold")
+
+  ) +
+  ggtitle("B) Symptom resolution") +
+  annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,1)), vjust=0, hjust = 0)
+
+
+survplot
+```
+
+```{r}
+fname <- paste0(here("Plots", intervention, "symptom_surv_plot_7days.pdf"))
+
+pdf(fname, width = 6, height = 6)
+print(survplot, newpage=F)
+dev.off()
+```
+
+```{r}
+sympt_dat_for_plot2$Trt <- as.factor(sympt_dat_for_plot2$Trt)
+sympt_dat_for_plot2$Trt <- factor(sympt_dat_for_plot2$Trt, levels = c(ref_arm, trts))
+
+coxfit <- coxph(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
+print(coxfit)
+```
+
+```{r}
+print(data.frame(exp(coxfit$coefficients) , exp(confint(coxfit))))
+```
+
+```{r}
+#Pair-wise log-rank test against reference arm
+pw_logrank_pval <- NULL
+for(i in 1:length(trts)){
+  trt_i <- trts[i]
+  temp <- sympt_dat_for_plot2 %>% filter(Trt %in% c(ref_arm, trt_i))
+  diff_i =survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = temp) 
+  p_val_i <- pchisq(diff_i$chisq, length(diff_i$n)-1, lower.tail = FALSE)
+  
+  pw_logrank_pval <- rbind(pw_logrank_pval,
+                           data.frame(trt_i, ref_arm, p_val_i))
+  
+}
+
+pw_logrank_pval
+
+```
