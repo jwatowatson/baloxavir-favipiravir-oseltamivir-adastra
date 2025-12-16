@@ -29,6 +29,7 @@ library(scales)
 library(cowplot)
 library(grid)
 library(webshot2)
+library(here)
 conflicts_prefer(dplyr::filter)
 
 ## information on software/hardware used
@@ -54,8 +55,8 @@ interim_version <- 6
 ```{r load_data}
 intervention = 'interim_firstResults'
 
-#ref_arm = 'No Study Drug' # Success/futility
-ref_arm = 'Baloxavir' # Non-inferiority
+ref_arm = 'No Study Drug' # Success/futility
+#ref_arm = 'Baloxavir' # Non-inferiority
 
 # depending on comparison with no study drug or positive control
 # will be used when plotting treatment efficacy CI wrt reference arm
@@ -74,7 +75,6 @@ use_threshold = T
 # set as file with relevant dataset
 f_name = here("Analysis_Data", paste0(intervention, "_analysis.csv"))
 adastra_dat = read.csv(f_name)
-adastra_dat <- adastra_dat %>% filter(Trt != 'Molnupiravir')
 adastra_dat$Rand_date = as.POSIXct(adastra_dat$Rand_date)
 adastra_dat$censor <- as.factor(adastra_dat$censor)
 trt_intervention = unique(adastra_dat$Trt)
@@ -157,16 +157,16 @@ adastra_dat = adastra_dat %>% group_by(ID, Timepoint_ID) %>%
 ```
 
 ```{r base_vl_plot}
-base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
-base_vl_plot
+# base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
+# base_vl_plot
 ```
 
 ```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
+# plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
 
-png(plot_name, width = 8, height = 4, units = "in", res = 600)
-base_vl_plot
-dev.off()
+# png(plot_name, width = 8, height = 4, units = "in", res = 600)
+# base_vl_plot
+# dev.off()
 ```
 
 ### For all analyses
