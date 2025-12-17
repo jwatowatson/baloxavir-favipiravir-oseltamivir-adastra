@@ -378,6 +378,7 @@ main_mod = 1# which(model_settings$prior==2&
 
 model_cols = brewer.pal(n = 8, name = 'Dark2')[1:nrow(model_settings)]
 names(model_cols) = paste('model', 1:nrow(model_settings))
+model_cols[1] <- "#1640D6" 
 ```
 
 ```{r get_effects with no interactions}
@@ -470,14 +471,14 @@ dev.off()
 ## Plot treatment effects
 
 ```{r}
-G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols)
+G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols, trt_order)
 G2
 ```
 
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_t12_trt.png"))
 
-png(plot_name, width = 12, height = 8, units = "in", res = 800)
+png(plot_name, width = 15, height = 8, units = "in", res = 350)
 plot_grid(G_hl, G2, ncol = 2, align = "hv", axis = "b")
 dev.off()
 ```

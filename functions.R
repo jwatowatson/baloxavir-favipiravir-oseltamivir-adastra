@@ -810,20 +810,19 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
     guides(color = guide_legend(override.aes=list(linetype = rep(0, length(unique(Half_life$Trt)))))) +
     theme(axis.text.y = element_blank(),
           axis.ticks = element_blank(),
-          axis.title = element_text(size = 12, face = "bold"),
+          axis.title = element_text(face = "bold"),
           plot.title = element_text( face = "bold"),
           legend.position = "bottom",
           legend.box="vertical",
           legend.margin=margin(),
-          legend.text = element_text(size = 12),
-          legend.title = element_text(size = 12, face = "bold")) +
+          legend.title = element_text(face = "bold")) +
     
     # Dynamically update xlim on the right and the legend size
     coord_cartesian(xlim = c(0, max(Half_life$t_12_med) + 5)) +
     xlab("Estimated viral clearance half-life (h)") +
     ylab("") +
     ggtitle("A) Individual viral clearance half-life\n") +
-    annotate("text", x = 32, y = nrow(Half_life)/5, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
+    annotate("text", x = 27.5, y = nrow(Half_life)/6, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
   G
   
   
@@ -885,13 +884,12 @@ plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
     theme(
       axis.text.y = element_blank(),
       axis.ticks = element_blank(),
-      axis.title = element_text(size = 12, face = "bold"),
+      axis.title = element_text( face = "bold"),
       plot.title = element_text(face = "bold"),
       legend.position = "bottom",
       legend.box = "vertical",
       legend.margin = margin(),
-      legend.text = element_text(size = 12),
-      legend.title = element_text(size = 12, face = "bold")
+      legend.title = element_text(face = "bold")
     ) +
     coord_cartesian(xlim = c(0, x_max + 5)) +
     xlab("Estimated viral clearance half-life (h)") +
@@ -910,14 +908,18 @@ plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
   G
 }
 
-plot_trt_effs <- function(effect_ests, model_cols){
+plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   effect_ests_plots <- NULL
+  trt_order2 <- trt_order[trt_order != ref_arm] %>% rev()
+
   for(i in 1:length(effect_ests)){
     effect_ests_plot <- as.data.frame(effect_ests[[i]])
     effect_ests_plot <- exp(effect_ests_plot)
     colnames(effect_ests_plot)[1:5] <- c("L95", "L80", "med", "U80", "U95")
     effect_ests_plot$arm <- row.names(effect_ests_plot)
     effect_ests_plot$arm <- as.factor(effect_ests_plot$arm)
+    effect_ests_plot$arm <- factor(effect_ests_plot$arm, levels = trt_order2)
+
     effect_ests_plot$model <- names(effect_ests)[i]
     effect_ests_plots <- rbind(effect_ests_plots, effect_ests_plot)
   }
@@ -935,30 +937,34 @@ plot_trt_effs <- function(effect_ests, model_cols){
   
   G <- ggplot(effect_ests_plots, 
               aes(x = arm, y = med, col = model, group = model)) +
-    geom_rect(aes(ymin = min(0.75, min(effect_ests_plots$L95)-0.05), ymax = study_threshold, xmin = 0, xmax = length(my.labs)+1), fill = "#7D7C7C", alpha = 0.2, col = NA) +
+    geom_rect(aes(ymin = min(0.75, min(L95)-0.05), ymax = study_threshold, xmin = 0, xmax = length(my.labs)+1), fill = "#7D7C7C", alpha = 0.2, col = NA) +
     geom_point(position = position_dodge(width = 0.5), size = 4) +
     geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
     geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
-    scale_color_manual(values = model_cols) +
+    scale_color_manual(values = model_cols, guide = NULL) +
     coord_flip() +
-    theme_bw() +
-    geom_hline(yintercept = 1, col = "red", linetype = "dashed") +
-    scale_y_continuous(labels = formatter, limits = c(min(0.75, min(effect_ests_plots$L95)-0.05), max(effect_ests_plots$U95) + .25), expand = c(0,0),
-                       breaks = seq(0.2,10, 1)) +
+    theme_bw(base_size = 14) +
+    geom_hline(yintercept = 1, col = "red", linetype = "32") +
+    scale_y_continuous(
+      labels = formatter,
+      limits = c(min(0.75, min(effect_ests_plots$L95) - 0.05), max(effect_ests_plots$U95) + .25),
+      expand = c(0, 0),
+      breaks = (function(rng){
+      rng_pct <- rng * 100
+      seq(from = floor(rng_pct[1] / 20) * 20, to = ceiling(rng_pct[2] / 20) * 20, by = 20) / 100
+      })(c(min(0.75, min(effect_ests_plots$L95) - 0.05), max(effect_ests_plots$U95) + .25))
+    ) +
     scale_x_discrete(labels= my.labs) +
     ylab("Change in viral clearance rate (%)") +
     xlab("") +
     ggtitle(title)  + 
-    theme( axis.title  = element_text(size = 12, face = "bold"),
-           axis.text.y = element_text(size = 12),
-           axis.text.x = element_text(size = 10),
-           plot.title  = element_text(size = 14, face = "bold"),
+    theme( axis.title  = element_text(face = "bold"),
+           plot.title  = element_text(face = "bold"),
            legend.position = "bottom",
-           legend.text  = element_text(size = 11),
-           legend.title = element_text(size = 11, face = "bold"),
-           axis.text = element_text(size = 10))
+           legend.title = element_text(face = "bold"))
   G
 }
+
 
 
 plot_trt_effs_2 <- function(effect_ests, model_cols, lower, upper){
