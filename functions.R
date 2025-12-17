@@ -92,8 +92,8 @@ plot_serial_data = function(xx, xlims=c(0,7)){
        xlim = xlims, yaxt='n',type='n',
        ylim = range(xx$log10_viral_load))
   axis(2, at = c(2,4,6), labels = c(expression(10^2),
-                                      expression(10^4),
-                                      expression(10^6)))
+                                    expression(10^4),
+                                    expression(10^6)))
   
   points(daily_VL_data$Time, daily_VL_data$daily_VL,
          col= adjustcolor(daily_VL_data$trt_color,.3),
@@ -400,10 +400,10 @@ plot_individ_curves = function(xx, IDs, xlims, mITT_threshold){
     
     axis(1, at = c(0,7,14,21))
     axis(2, at = c(0,2,4,6,8), labels = c(1,
-                                        expression(10^2),
-                                        expression(10^4),
-                                        expression(10^6),
-                                        expression(10^8)))
+                                          expression(10^2),
+                                          expression(10^4),
+                                          expression(10^6),
+                                          expression(10^8)))
     abline(h=log10(mITT_threshold), lty=2)
     
   }
@@ -633,48 +633,48 @@ get_trt_colors = function(){
   trt_cols['Baloxavir'] = viridis::inferno(n = 10)[5]
   trt_cols['Molnupiravir'] = viridis::inferno(n = 10)[7]
   
-
+  
   return(trt_cols)
 }
 
 
 
 plot_baseline_vl <- function(Baseline_data){
-
-Baseline_data$symptomDay <- as.factor(Baseline_data$symptomDay)
-
-G1 <- ggplot(Baseline_data, aes(x = fluType, y = Baseline.viral.load)) +
-  geom_jitter(width = 0.1, size = 3, alpha = 0.75, aes(col = fluType)) +
-  geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8) +
-  theme_bw() +
-  scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
-  scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
-  guides(shape = guide_legend(override.aes = list(size = 4))) +
-  xlab("") +
-  ylab("Baseline viral densities (log10 genomes/mL)") +
-  theme(axis.text = element_text(size = 11),
-        axis.title = element_text(size = 12, face = "bold"),
-        plot.title = element_text(size = 14, face = "bold"),
-        panel.spacing = unit(1, "lines")
-  )
-
-G2 <- ggplot(Baseline_data, aes(x = symptomDay, y = Baseline.viral.load)) +
-  geom_point(position=position_jitterdodge(dodge.width=0.8, jitter.width = 0.2), size = 3, alpha = 0.75, aes(col = fluType)) +
-  geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8, position=position_dodge(width=0.8)) +
-  theme_bw() +
-  scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
-  scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
-  guides(shape = guide_legend(override.aes = list(size = 4))) +
-  xlab("Time since symptom onset (days)") +
-  ylab("Baseline viral densities (log10 genomes/mL)") +
-  theme(axis.text = element_text(size = 11),
-        axis.title = element_text(size = 12, face = "bold"),
-        plot.title = element_text(size = 14, face = "bold"),
-        panel.spacing = unit(1, "lines")
-  )
-
-ggarrange(G1, G2, ncol = 2, labels = "AUTO", common.legend = T, legend = "right")
-
+  
+  Baseline_data$symptomDay <- as.factor(Baseline_data$symptomDay)
+  
+  G1 <- ggplot(Baseline_data, aes(x = fluType, y = Baseline.viral.load)) +
+    geom_jitter(width = 0.1, size = 3, alpha = 0.75, aes(col = fluType)) +
+    geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8) +
+    theme_bw() +
+    scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
+    scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
+    guides(shape = guide_legend(override.aes = list(size = 4))) +
+    xlab("") +
+    ylab("Baseline viral densities (log10 genomes/mL)") +
+    theme(axis.text = element_text(size = 11),
+          axis.title = element_text(size = 12, face = "bold"),
+          plot.title = element_text(size = 14, face = "bold"),
+          panel.spacing = unit(1, "lines")
+    )
+  
+  G2 <- ggplot(Baseline_data, aes(x = symptomDay, y = Baseline.viral.load)) +
+    geom_point(position=position_jitterdodge(dodge.width=0.8, jitter.width = 0.2), size = 3, alpha = 0.75, aes(col = fluType)) +
+    geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8, position=position_dodge(width=0.8)) +
+    theme_bw() +
+    scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
+    scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
+    guides(shape = guide_legend(override.aes = list(size = 4))) +
+    xlab("Time since symptom onset (days)") +
+    ylab("Baseline viral densities (log10 genomes/mL)") +
+    theme(axis.text = element_text(size = 11),
+          axis.title = element_text(size = 12, face = "bold"),
+          plot.title = element_text(size = 14, face = "bold"),
+          panel.spacing = unit(1, "lines")
+    )
+  
+  ggarrange(G1, G2, ncol = 2, labels = "AUTO", common.legend = T, legend = "right")
+  
 }
 
 
@@ -769,14 +769,14 @@ formatter <- function(x){
 plot_hl <- function(Half_life, trt_colors, trt_order){
   Half_life$fluType <- as.factor(Half_life$fluType)
   levels(Half_life$fluType) <- paste0("Influenza ", levels(Half_life$fluType))
-
+  
   Half_life <- Half_life %>%
-      mutate(Trt = factor(Trt, levels = rev(trt_order))) %>%
-      arrange(Trt, t_12_med) %>%
-      mutate(ID = factor(ID, levels = unique(ID)))
-    
-
-
+    mutate(Trt = factor(Trt, levels = rev(trt_order))) %>%
+    arrange(Trt, t_12_med) %>%
+    mutate(ID = factor(ID, levels = unique(ID)))
+  
+  
+  
   Half_life_med <- Half_life %>%
     group_by(Trt) %>%
     summarise(med_hl = median(t_12_med))  %>%
@@ -785,7 +785,7 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
   colors <- trt_colors[names(trt_colors) %in% unique(Half_life$Trt)]
   colors <- colors[levels(Half_life$Trt)]
   labels <- names(colors)
-
+  
   f_tab <- Half_life %>%
     distinct(ID, Trt) %>%
     group_by(Trt) %>%
@@ -835,42 +835,42 @@ plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
       fluType = as.factor(fluType),
       fluType = factor(paste0("Influenza ", levels(fluType))[as.integer(fluType)], levels = paste0("Influenza ", unique(fluType)))
     )
-
+  
   Half_life <- Half_life |>
     mutate(Trt = factor(Trt, levels = rev(trt_order))) |>
     arrange(fluType, Trt, t_12_med) |>
     mutate(ID = factor(ID, levels = unique(ID)))
-
+  
   Half_life_med <- Half_life |>
     group_by(Trt, fluType) |>
     summarise(med_hl = median(t_12_med, na.rm = TRUE), .groups = "drop") |>
     as.data.frame()
-
+  
   colors <- trt_colors[names(trt_colors) %in% unique(Half_life$Trt)]
   colors <- colors[levels(Half_life$Trt)]
   labels <- names(colors)
-
+  
   f_tab <- Half_life |>
     distinct(ID, Trt, fluType) |>
     group_by(Trt, fluType) |>
     summarise(n = n(), .groups = "drop") |>
     as.data.frame()
-
+  
   f_tab <- f_tab |>
     left_join(Half_life_med, by = c("Trt", "fluType"))
-
+  
   f_tab$lab <- paste0(f_tab$Trt, " (n = ", f_tab$n, "): ", sprintf("%.1f", f_tab$med_hl), " h")
   f_tab <- f_tab %>% arrange(match(Trt, (trt_order)))
-
+  
   freq_lab <- f_tab |>
     group_by(fluType) |>
     summarise(freq_lab = paste(lab, collapse = "\n"), .groups = "drop")
-
+  
   # X position for per-facet labels (relative)
   x_max <- max(Half_life$t_12_med, na.rm = TRUE)
   x_pos <- 33.5
   freq_lab <- freq_lab |> mutate(x_pos = x_pos)
-
+  
   G <- ggplot(Half_life, aes(x = t_12_med, y = ID)) +
     geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up, colour = Trt), width = 0, alpha = 0.4) +
     geom_point(size = 2.5, aes(shape = fluType, colour = Trt)) +
@@ -904,14 +904,14 @@ plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
       vjust = 1.2,
       size = 3.5
     ) +   facet_grid(fluType ~ ., scales = "free_y")
-
+  
   G
 }
 
 plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   effect_ests_plots <- NULL
   trt_order2 <- trt_order[trt_order != ref_arm] %>% rev()
-
+  
   for(i in 1:length(effect_ests)){
     effect_ests_plot <- as.data.frame(effect_ests[[i]])
     effect_ests_plot <- exp(effect_ests_plot)
@@ -919,7 +919,7 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
     effect_ests_plot$arm <- row.names(effect_ests_plot)
     effect_ests_plot$arm <- as.factor(effect_ests_plot$arm)
     effect_ests_plot$arm <- factor(effect_ests_plot$arm, levels = trt_order2)
-
+    
     effect_ests_plot$model <- names(effect_ests)[i]
     effect_ests_plots <- rbind(effect_ests_plots, effect_ests_plot)
   }
@@ -930,7 +930,7 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   lab_ref <- ref_arm
   #Labeling intervention arm
   my.labs <- levels(effect_ests_plot$arm)
-
+  
   title <- paste0("B) Estimated treatment effects relative to \n", tolower(lab_ref), " arm")
   
   names(model_cols) <- levels(effect_ests_plots$model)
@@ -950,8 +950,8 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
       limits = c(min(0.75, min(effect_ests_plots$L95) - 0.05), max(effect_ests_plots$U95) + .25),
       expand = c(0, 0),
       breaks = (function(rng){
-      rng_pct <- rng * 100
-      seq(from = floor(rng_pct[1] / 20) * 20, to = ceiling(rng_pct[2] / 20) * 20, by = 20) / 100
+        rng_pct <- rng * 100
+        seq(from = floor(rng_pct[1] / 20) * 20, to = ceiling(rng_pct[2] / 20) * 20, by = 20) / 100
       })(c(min(0.75, min(effect_ests_plots$L95) - 0.05), max(effect_ests_plots$U95) + .25))
     ) +
     scale_x_discrete(labels= my.labs) +
@@ -1213,48 +1213,48 @@ plot_mITT <- function(adastra_dat, start_dt = "2023-04-01"){
 }
 
 cal_fever_clearance <- function(temp_dat_for_plot, threshold, window_clear){
-  temp_dat_for_plot$fever_binary <- temp_dat_for_plot$fut_temp > threshold
   
-  temp_dat_for_plot$Label2 <- as.numeric(as.factor(temp_dat_for_plot$Label))
-  IDs_inc <- unique(temp_dat_for_plot$Label2)
-  temp_dat_for_plot$temp_time <- as.POSIXlt(temp_dat_for_plot$temp_time)
+  temp_dat_for_plot = temp_dat_for_plot %>%
+    filter(Fever_Baseline==1) %>%
+    mutate(fever_binary = temp > threshold,
+           clearance_time = NA,
+           clearance_time_cens = 1,# For interval censored data, the status indicator is 0=right censored, 1=event at time, 2=left censored, 3=interval censored. 
+           Time = ifelse(Time<0, 0, Time),
+    ) %>% group_by(Label) %>%
+    mutate(n=n()) %>% filter(n>1)
   
-  temp_dat_for_plot$clearance_time = NA
-  # For interval censored data, the status indicator is 0=right censored, 1=event at time, 2=left censored, 3=interval censored. 
-  temp_dat_for_plot$clearance_time_cens = 1
   ############################################################################################
-  for(id in IDs_inc){
-    ind = temp_dat_for_plot$Label2==id
+  for(id in unique(temp_dat_for_plot$Label)){
+    ind = temp_dat_for_plot$Label==id
     
-    if(all(!temp_dat_for_plot$fever_binary[ind])){ # never fever
-      temp_dat_for_plot$clearance_time[ind]=0
-    } else if(all(temp_dat_for_plot$fever_binary[ind])){ # always fever
+    if(all(temp_dat_for_plot$fever_binary[ind])){ # always fever
+      
       writeLines(sprintf('all fever for %s with %s FUP points',id,sum(ind)))
-      temp_dat_for_plot$clearance_time[ind] = max(temp_dat_for_plot$Time_adj[ind])
+      temp_dat_for_plot$clearance_time[ind] = max(temp_dat_for_plot$Time[ind])
       temp_dat_for_plot$clearance_time_cens[ind] = 0 #censored obs
+      
     } else { # fever cleared
-      j_cleared = which(ind & !temp_dat_for_plot$fever_binary)
+      j_cleared = which(ind & !temp_dat_for_plot$fever_binary & temp_dat_for_plot$Time>0)
       check_ahead=F
       for(j in j_cleared){
         if(!check_ahead){
           ind_check = 
             which(ind & 
-                    temp_dat_for_plot$Time_adj>temp_dat_for_plot$Time_adj[j] &
-                    temp_dat_for_plot$Time_adj<temp_dat_for_plot$Time_adj[j] + window_clear)
+                    temp_dat_for_plot$Time>temp_dat_for_plot$Time[j] &
+                    temp_dat_for_plot$Time<temp_dat_for_plot$Time[j] + window_clear)
           if(length(ind_check)>0 & all(!temp_dat_for_plot$fever_binary[ind_check])){
-            temp_dat_for_plot$clearance_time[ind]=temp_dat_for_plot$Time_adj[j]
+            temp_dat_for_plot$clearance_time[ind]=temp_dat_for_plot$Time[j]
             check_ahead=T
           }
         }
       }
       if(!check_ahead){
-        temp_dat_for_plot$clearance_time[ind]=tail(temp_dat_for_plot$Time_adj[ind],1)
+        temp_dat_for_plot$clearance_time[ind]=tail(temp_dat_for_plot$Time[ind],1)
         temp_dat_for_plot$clearance_time_cens[ind]=0
       }
     }
   }
-  
-  temp_dat_for_plot
+  return(temp_dat_for_plot)
 }
 
 

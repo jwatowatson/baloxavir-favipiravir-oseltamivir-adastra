@@ -46,8 +46,6 @@ my_probs = c(0.025, 0.1, .5, .9, .975)
 source('functions.R')
 trt_colors = get_trt_colors()
 interim_version <- 6
-
-trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 ```
 
 ## *Load data*
@@ -160,16 +158,16 @@ adastra_dat = adastra_dat %>% group_by(ID, Timepoint_ID) %>%
 ```
 
 ```{r base_vl_plot}
-# base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
-# base_vl_plot
+base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
+base_vl_plot
 ```
 
 ```{r}
-# plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
 
-# png(plot_name, width = 8, height = 4, units = "in", res = 600)
-# base_vl_plot
-# dev.off()
+png(plot_name, width = 8, height = 4, units = "in", res = 600)
+base_vl_plot
+dev.off()
 ```
 
 ### For all analyses
@@ -217,7 +215,7 @@ tab.ff
 ```{r}
 kable_path <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_Baseline_characteristics.png")
 )
-# save_kable(tab.ff, file = kable_path)
+save_kable(tab.ff, file = kable_path)
 ```
 
 ```{r}
@@ -241,24 +239,24 @@ Baseline_data %>%
 ## Plot Baseline viral loads
 
 ```{r baseline_VL}
-# G_baseline_vl <- plot_baseline_vl(Baseline_data)
-# G_baseline_vl
+G_baseline_vl <- plot_baseline_vl(Baseline_data)
+G_baseline_vl
 
-# fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
+fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
 
-# png(fname, width = 8, height = 4, units = "in", res = 600)
-# G_baseline_vl
-# dev.off()
+png(fname, width = 8, height = 4, units = "in", res = 600)
+G_baseline_vl
+dev.off()
 ```
 
 ```{r}
-# t.test(Baseline.viral.load ~ fluType, data = Baseline_data)
+t.test(Baseline.viral.load ~ fluType, data = Baseline_data)
 ```
 
 ## Viral load dynamics
 
 ```{r, warning=F}
-box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T, trt_order = trt_order)
+box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T)
 box_vl_flutype
 ```
 
@@ -347,8 +345,6 @@ save(model_settings,
 library(tictoc)
 tic()  # Start timing
 
-RUN_MODELS <- F
-
 if(RUN_MODELS){
   system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
 }
@@ -378,7 +374,6 @@ main_mod = 1# which(model_settings$prior==2&
 
 model_cols = brewer.pal(n = 8, name = 'Dark2')[1:nrow(model_settings)]
 names(model_cols) = paste('model', 1:nrow(model_settings))
-model_cols[1] <- "#1640D6" 
 ```
 
 ```{r get_effects with no interactions}
@@ -451,19 +446,19 @@ Half_life %>%
 ```
 
 ```{r}
-G_hl <- plot_hl(Half_life, trt_colors, trt_order)
+G_hl <- plot_hl(Half_life, trt_colors)
 G_hl
 ```
 
 ```{r}
-G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors, trt_order)
+G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors)
 G_hl_flutype
 ```
 
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_hl_flutype.png"))
 
-png(plot_name, width = 9, height = 8, units = "in", res = 800)
+png(plot_name, width = 8, height = 8, units = "in", res = 800)
 G_hl_flutype
 dev.off()
 ```
@@ -471,14 +466,14 @@ dev.off()
 ## Plot treatment effects
 
 ```{r}
-G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols, trt_order)
+G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols)
 G2
 ```
 
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_t12_trt.png"))
 
-png(plot_name, width = 15, height = 8, units = "in", res = 350)
+png(plot_name, width = 12, height = 8, units = "in", res = 800)
 plot_grid(G_hl, G2, ncol = 2, align = "hv", axis = "b")
 dev.off()
 ```
