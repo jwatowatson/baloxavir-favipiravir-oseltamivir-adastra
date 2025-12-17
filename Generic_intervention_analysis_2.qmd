@@ -46,8 +46,6 @@ my_probs = c(0.025, 0.1, .5, .9, .975)
 source('functions.R')
 trt_colors = get_trt_colors()
 interim_version <- 6
-
-trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 ```
 
 ## *Load data*
@@ -57,8 +55,8 @@ trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 ```{r load_data}
 intervention = 'interim_firstResults'
 
-ref_arm = 'No Study Drug' # Success/futility
-#ref_arm = 'Baloxavir' # Non-inferiority
+#ref_arm = 'No Study Drug' # Success/futility
+ref_arm = 'Baloxavir' # Non-inferiority
 
 # depending on comparison with no study drug or positive control
 # will be used when plotting treatment efficacy CI wrt reference arm
@@ -113,6 +111,7 @@ print(table(Intervention=pop_table$Trt))
 
 ```{r timeline}
 timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluType))
+timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluType))
 timeline
 ```
 
@@ -134,6 +133,7 @@ mITT_plot
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_mITT_timeline.png"))
 
+png(plot_name, width = 12, height = 6, units = "in", res = 600)
 png(plot_name, width = 12, height = 6, units = "in", res = 600)
 mITT_plot
 dev.off()
@@ -160,16 +160,16 @@ adastra_dat = adastra_dat %>% group_by(ID, Timepoint_ID) %>%
 ```
 
 ```{r base_vl_plot}
-# base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
-# base_vl_plot
+base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T) 
+base_vl_plot
 ```
 
 ```{r}
-# plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
 
-# png(plot_name, width = 8, height = 4, units = "in", res = 600)
-# base_vl_plot
-# dev.off()
+png(plot_name, width = 8, height = 4, units = "in", res = 600)
+base_vl_plot
+dev.off()
 ```
 
 ### For all analyses
@@ -233,32 +233,42 @@ Baseline_data %>%
             onset_q2 = quantile(symptomDay,0.5),
             onset_q3 = quantile(symptomDay,0.75),
             mean_onset = mean(symptomDay) %>% round(digits = 1),
-            sd_onset = sd(symptomDay) %>% round(digits = 1)
+            sd_onset = sd(symptomDay) %>% round(digits = 1),
+            median_onset = median(symptomDay) %>% round(digits = 2),
+            iqr_onset = IQR(symptomDay) %>% round(digits = 2)
             
             )
+```
+
+```{r}
+Baseline_data %>%
+  summarise(onset_q1 = quantile(symptomDay,0.25),
+            onset_q2 = quantile(symptomDay,0.5),
+            onset_q3 = quantile(symptomDay,0.75)
+  )
 ```
 
 ## Plot Baseline viral loads
 
 ```{r baseline_VL}
-# G_baseline_vl <- plot_baseline_vl(Baseline_data)
-# G_baseline_vl
+G_baseline_vl <- plot_baseline_vl(Baseline_data)
+G_baseline_vl
 
-# fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
+fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
 
-# png(fname, width = 8, height = 4, units = "in", res = 600)
-# G_baseline_vl
-# dev.off()
+png(fname, width = 8, height = 4, units = "in", res = 600)
+G_baseline_vl
+dev.off()
 ```
 
 ```{r}
-# t.test(Baseline.viral.load ~ fluType, data = Baseline_data)
+t.test(Baseline.viral.load ~ fluType, data = Baseline_data)
 ```
 
 ## Viral load dynamics
 
 ```{r, warning=F}
-box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T, trt_order = trt_order)
+box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T)
 box_vl_flutype
 ```
 
@@ -271,6 +281,7 @@ dev.off()
 ```
 
 ```{r box_vl, warning=F}
+box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F)
 box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F)
 box_vl
 ```
@@ -378,7 +389,6 @@ main_mod = 1# which(model_settings$prior==2&
 
 model_cols = brewer.pal(n = 8, name = 'Dark2')[1:nrow(model_settings)]
 names(model_cols) = paste('model', 1:nrow(model_settings))
-model_cols[1] <- "#1640D6" 
 ```
 
 ```{r get_effects with no interactions}
@@ -451,19 +461,28 @@ Half_life %>%
 ```
 
 ```{r}
-G_hl <- plot_hl(Half_life, trt_colors, trt_order)
+Half_life %>%
+  group_by(fluType, Trt) %>%
+  summarise(med = median(t_12_med) %>% round(1),
+            q1 = quantile(t_12_med,0.25) %>% round(1),
+            q3 = quantile(t_12_med, 0.75) %>% round(1),
+            lab = paste0(Trt[1], " ", med, " h [IQR: ", q1, " to ", q3, " h]")) 
+```
+
+```{r}
+G_hl <- plot_hl(Half_life, trt_colors, trt_order=c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug"))
 G_hl
 ```
 
 ```{r}
-G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors, trt_order)
+G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors, trt_order=c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug"))
 G_hl_flutype
 ```
 
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_hl_flutype.png"))
 
-png(plot_name, width = 9, height = 8, units = "in", res = 800)
+png(plot_name, width = 8, height = 8, units = "in", res = 800)
 G_hl_flutype
 dev.off()
 ```
@@ -471,7 +490,7 @@ dev.off()
 ## Plot treatment effects
 
 ```{r}
-G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols, trt_order)
+G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = model_cols, trt_order=c("Baloxavir", "Favipiravir", "Oseltamivir"))
 G2
 ```
 
@@ -500,6 +519,7 @@ dev.off()
 if(ref_arm != "No Study Drug"){
   plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png"))
 
+png(plot_name, width = 6, height = 6, units = "in", res = 600)
 png(plot_name, width = 6, height = 6, units = "in", res = 600)
 print(G2 + 
         ggtitle(paste0("Estimated treatment effect relative to\n", tolower(ref_arm) , " arm")) 

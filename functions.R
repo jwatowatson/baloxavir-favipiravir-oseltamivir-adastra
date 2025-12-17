@@ -767,19 +767,15 @@ formatter <- function(x){
 }
 
 plot_hl <- function(Half_life, trt_colors, trt_order){
-  Half_life$fluType <- as.factor(Half_life$fluType)
-  levels(Half_life$fluType) <- paste0("Influenza ", levels(Half_life$fluType))
   
   Half_life <- Half_life %>%
     mutate(Trt = factor(Trt, levels = rev(trt_order))) %>%
     arrange(Trt, t_12_med) %>%
     mutate(ID = factor(ID, levels = unique(ID)))
   
-  
-  
   Half_life_med <- Half_life %>%
     group_by(Trt) %>%
-    summarise(med_hl = median(t_12_med))  %>%
+    summarise(med_hl = median(t_12_med, na.rm = TRUE), .groups = "drop") %>%
     as.data.frame()
   
   colors <- trt_colors[names(trt_colors) %in% unique(Half_life$Trt)]
@@ -789,42 +785,46 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
   f_tab <- Half_life %>%
     distinct(ID, Trt) %>%
     group_by(Trt) %>%
-    summarise(n = n()) %>%
+    summarise(n = n(), .groups = "drop") %>%
     as.data.frame()
+  
   f_tab$med_hl <- Half_life_med$med_hl
-  
   f_tab$lab <- paste0(f_tab$Trt, " (n = ", f_tab$n, "): ", sprintf("%.1f", f_tab$med_hl), " h")
-  f_tab <- f_tab %>% arrange(match(Trt, (trt_order)))
-  freq_lab <- paste(f_tab$lab, collapse = '\n')
+  f_tab <- f_tab %>% arrange(match(Trt, trt_order))
+  freq_lab <- paste(f_tab$lab, collapse = "\n")
   
-  
-  G <- ggplot(Half_life, aes(x = t_12_med, y = as.factor(as.numeric(ID)), col = Trt)) +
-    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up),width = 0, alpha = 0.4) +
-    geom_point(size = 2.5, aes(shape = fluType), alpha = 0.8) +
-    geom_vline(data = Half_life_med, aes(xintercept = med_hl, col = Trt),linewidth = 1) +
-    theme_bw(base_size = 18) +  
-    scale_y_discrete(expand = c(0.01,0.01), breaks = NULL) +
+  G <- ggplot(Half_life, aes(x = t_12_med, y = ID, col = Trt)) +
+    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up), width = 0, alpha = 0.4) +
+    geom_point(size = 2.5, shape = 16) +  # <- always circles
+    geom_vline(data = Half_life_med, aes(xintercept = med_hl, col = Trt), linewidth = 1) +
+    theme_bw(base_size = 14) +
+    scale_y_discrete(expand = c(0.01, 0.01), breaks = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
-    scale_shape_manual(values = c(16, 17), name = "") +
-    scale_x_continuous(breaks = seq(0,40,5), expand = c(0,0), minor_breaks = NULL) +
-    guides(color = guide_legend(override.aes=list(linetype = rep(0, length(unique(Half_life$Trt)))))) +
-    theme(axis.ticks.y = element_blank(),
-          axis.title = element_text(face = "bold"),
-          plot.title = element_text( face = "bold"),
-          legend.position = "bottom",
-          legend.box="vertical",
-          legend.margin=margin(),
-          legend.title = element_text(face = "bold")) +
-    
-    # Dynamically update xlim on the right and the legend size
-    coord_cartesian(xlim = c(0, max(Half_life$t_12_med) + 5)) +
+    scale_x_continuous(breaks = seq(0, 40, 5), expand = c(0, 0)) +
+    guides(color = guide_legend(override.aes = list(linetype = 0))) +
+    theme(
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title = element_text(face = "bold"),
+      plot.title = element_text(face = "bold"),
+      legend.position = "bottom",
+      legend.box = "vertical",
+      legend.margin = margin(),
+      legend.title = element_text(face = "bold"),
+      plot.margin = margin(10, 20, 10, 10)  # <- extra right margin for the box
+    ) +
+    coord_cartesian(xlim = c(0, max(Half_life$t_12_med, na.rm = TRUE) + 5)) +
     xlab("Estimated viral clearance half-life (h)") +
-    ylab("Individual participants") +
-    ggtitle("A) Individual viral clearance half-life\n") +
-    annotate("text", x = 27, y = nrow(Half_life)/8, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
+    ylab("") +
+    annotate(
+      "text",
+      x = Inf, y = Inf,                 # <- anchor to top-right
+      label = freq_lab,
+      hjust = 1.02, vjust = 1.1,        # <- nudge inward (tweak if needed)
+      size = 4
+    )
+  
   G
-  
-  
 }
 
 
@@ -956,7 +956,7 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
     scale_x_discrete(labels= my.labs) +
     ylab("Change in viral clearance rate (%)") +
     xlab("") +
-    ggtitle(title)  + 
+    #ggtitle(title)  + 
     theme( axis.title  = element_text(face = "bold"),
            plot.title  = element_text(face = "bold"),
            legend.position = "bottom",
