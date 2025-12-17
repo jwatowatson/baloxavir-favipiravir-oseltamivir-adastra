@@ -798,18 +798,17 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
   freq_lab <- paste(f_tab$lab, collapse = '\n')
   
   
-  G <- ggplot(Half_life, aes(x = t_12_med, y = ID, col = Trt)) +
+  G <- ggplot(Half_life, aes(x = t_12_med, y = as.factor(as.numeric(ID)), col = Trt)) +
     geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up),width = 0, alpha = 0.4) +
-    geom_point(size = 2.5, aes(shape = fluType)) +
+    geom_point(size = 2.5, aes(shape = fluType), alpha = 0.8) +
     geom_vline(data = Half_life_med, aes(xintercept = med_hl, col = Trt),linewidth = 1) +
-    theme_bw(base_size = 14) +  
+    theme_bw(base_size = 18) +  
     scale_y_discrete(expand = c(0.01,0.01), breaks = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
     scale_shape_manual(values = c(16, 17), name = "") +
-    scale_x_continuous(breaks = seq(0,40,5), expand = c(0,0)) +
+    scale_x_continuous(breaks = seq(0,40,5), expand = c(0,0), minor_breaks = NULL) +
     guides(color = guide_legend(override.aes=list(linetype = rep(0, length(unique(Half_life$Trt)))))) +
-    theme(axis.text.y = element_blank(),
-          axis.ticks = element_blank(),
+    theme(axis.ticks.y = element_blank(),
           axis.title = element_text(face = "bold"),
           plot.title = element_text( face = "bold"),
           legend.position = "bottom",
@@ -820,9 +819,9 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
     # Dynamically update xlim on the right and the legend size
     coord_cartesian(xlim = c(0, max(Half_life$t_12_med) + 5)) +
     xlab("Estimated viral clearance half-life (h)") +
-    ylab("") +
+    ylab("Individual participants") +
     ggtitle("A) Individual viral clearance half-life\n") +
-    annotate("text", x = 27.5, y = nrow(Half_life)/6, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
+    annotate("text", x = 27, y = nrow(Half_life)/8, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
   G
   
   
@@ -938,12 +937,12 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   G <- ggplot(effect_ests_plots, 
               aes(x = arm, y = med, col = model, group = model)) +
     geom_rect(aes(ymin = min(0.75, min(L95)-0.05), ymax = study_threshold, xmin = 0, xmax = length(my.labs)+1), fill = "#7D7C7C", alpha = 0.2, col = NA) +
-    geom_point(position = position_dodge(width = 0.5), size = 4) +
-    geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
-    geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
+    geom_point(position = position_dodge(width = 0.5), size = 4.5) +
+    geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 1) +
+    geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 2.25) +
     scale_color_manual(values = model_cols, guide = NULL) +
     coord_flip() +
-    theme_bw(base_size = 14) +
+    theme_bw(base_size = 18) +
     geom_hline(yintercept = 1, col = "red", linetype = "32") +
     scale_y_continuous(
       labels = formatter,
@@ -1033,7 +1032,10 @@ plot_trt_effs_2 <- function(effect_ests, model_cols, lower, upper){
 }
 
 
-plot_randomisation <- function(Baseline_data){
+plot_randomisation <- function(Baseline_data, trt_order){
+  Baseline_data <- Baseline_data %>%
+    mutate(Trt = factor(Trt, levels = rev(trt_order)))
+  
   Baseline_data$Rand_date <- as.Date(Baseline_data$Rand_date)
   
   ggplot(Baseline_data, aes(x = Rand_date, y = Trt, col = fluType)) +

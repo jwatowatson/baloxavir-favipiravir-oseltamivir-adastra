@@ -347,7 +347,7 @@ save(model_settings,
 library(tictoc)
 tic()  # Start timing
 
-RUN_MODELS <- F
+RUN_MODELS <- T
 
 if(RUN_MODELS){
   system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
@@ -479,7 +479,7 @@ G2
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_t12_trt.png"))
 
 png(plot_name, width = 15, height = 8, units = "in", res = 350)
-plot_grid(G_hl, G2, ncol = 2, align = "hv", axis = "b")
+plot_grid(G_hl, G2, ncol = 2, align = "hv")
 dev.off()
 ```
 
