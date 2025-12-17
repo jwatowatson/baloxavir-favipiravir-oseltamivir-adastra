@@ -34,6 +34,8 @@ window_clear <- 1
 
 use_threshold <- T
 mITT_threshold <- 250
+
+trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 ```
 
 ```{r}
@@ -123,7 +125,9 @@ sympt_dat_for_plot$Trt <- factor(sympt_dat_for_plot$Trt, levels = c(ref_arm, trt
 sympt_dat_for_plot2 <- sympt_dat_for_plot#[sympt_dat_for_plot$symptoms_Baseline == 1, ]
 sympt_dat_for_plot2 <- sympt_dat_for_plot2 %>%
   group_by(Label) %>%
-  filter(Timepoint_ID == 0)
+  filter(Timepoint_ID == 0) %>%
+ungroup() %>%
+mutate(Trt = factor(Trt, levels = trt_order))
 
 fit <- survfit(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
 diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
@@ -153,7 +157,7 @@ round(prop.table(table(sympt_dat_for_plot2$clearance_time_cens)),2)
 trt_colors = get_trt_colors()
 trt_colors <- trt_colors[!is.na(trt_colors)]
 #lab <- c("Baloxavir", "Favipiravir", "Oseltamivir")
-cols <- trt_colors[c(ref_arm, trts)]
+cols <- trt_colors[trt_order]
 cols <- as.character(cols)
 ```
 
@@ -162,24 +166,25 @@ survplot <- survminer::ggsurvplot(fit,pval=F,
                                   risk.table = T,
                                   risk.table.y.text=F,
                                   palette = cols,
-                                  ggtheme = theme_bw(),
-                                  legend.labs = c(ref_arm, trts),
+                                  ggtheme = theme_bw(base_size = 16),
+                                  legend.labs = trt_order,
                                   break.time.by = 1,
                                  # pval.size = 4,
                                 #  pval.coord = c(0,0.1),
                                   size = 1.5,
                                   alpha = 0.7,
                                   xlim = c(0,7)) 
+lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.1f", p_val)
+
 survplot$plot <- survplot$plot + 
   geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
   geom_hline(yintercept = 0.5, linetype = "dashed", col = "red", size = 0.6) +
-  xlab("Symptom clearance time (days)") +
+  xlab("Time since randomisation (days)") +
   ylab("Proportion of patients with symptoms") +
-  theme(axis.text=element_text(size=8),
-        axis.title=element_text(size=13,face="bold",),
-        strip.text = element_text(size = 10, face = "bold"),
-        title = element_text(size = 13, face = "bold")
-
+ theme(
+        axis.title=element_text(face="bold",),
+        strip.text = element_text(face = "bold"),
+        title = element_blank()
   ) +
   ggtitle("B) Symptom resolution") +
   annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,1)), vjust=0, hjust = 0)
@@ -197,15 +202,15 @@ dev.off()
 ```
 
 ```{r}
-sympt_dat_for_plot2$Trt <- as.factor(sympt_dat_for_plot2$Trt)
-sympt_dat_for_plot2$Trt <- factor(sympt_dat_for_plot2$Trt, levels = c(ref_arm, trts))
+# sympt_dat_for_plot2$Trt <- as.factor(sympt_dat_for_plot2$Trt)
+# sympt_dat_for_plot2$Trt <- factor(sympt_dat_for_plot2$Trt, levels = c(ref_arm, trts))
 
-coxfit <- coxph(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
-print(coxfit)
+# coxfit <- coxph(Surv(clearance_time, clearance_time_cens) ~ Trt, data = sympt_dat_for_plot2) 
+# print(coxfit)
 ```
 
 ```{r}
-print(data.frame(exp(coxfit$coefficients) , exp(confint(coxfit))))
+# print(data.frame(exp(coxfit$coefficients) , exp(confint(coxfit))))
 ```
 
 ```{r}
