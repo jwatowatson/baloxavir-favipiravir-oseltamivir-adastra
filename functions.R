@@ -720,19 +720,27 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
   colors <- colors[levels(dataplot$Trt)]
   labels <- names(colors)
   
-  G <- ggplot(dataplot, aes(x = Timepoint_ID, y = daily_VL, fill = Trt)) +
-    geom_jitter(width = 0.2, alpha = 0.25, size = 1.5, aes(shape = censor, fill = Trt),
-                stroke = 0.5) +
-    geom_boxplot(width=0.65, size = 0.5, outlier.shape = NA,  coef = 0, aes(fill = Trt), alpha = 0.3) +
-    geom_line(data = dataplot_median, aes(x =  Timepoint_ID, y = median_VL, group = Trt, col = Trt), 
+  # numeric x positions for boxplots/medians (1..5); continuous Time for points
+  G <- ggplot(dataplot, aes(y = daily_VL, fill = Trt)) +
+    # points placed at continuous Time
+    geom_point(data = dataplot, aes(x = Time, y = daily_VL, shape = censor, fill = Trt),
+               alpha = 0.25, size = 1.5, stroke = 0.5) +
+    # boxplots centered at integer positions (as.numeric(Timepoint_ID)); group by Timepoint_ID
+    geom_boxplot(data = dataplot, aes(x = as.numeric(Timepoint_ID)-1, y = daily_VL, group = Timepoint_ID, fill = Trt),
+                 width = 0.65, size = 0.5, outlier.shape = NA, coef = 0, alpha = 0.3) +
+    # median line/points at integer positions
+    geom_line(data = dataplot_median, aes(x = as.numeric(Timepoint_ID)-1, y = median_VL, group = Trt, col = Trt),
               linewidth = 1.2, linetype = 1) +
-    geom_point(data = dataplot_median, aes(x = Timepoint_ID, y = median_VL, fill = Trt)
-               , size = 3.5, shape = 24, col = "black") +
+    geom_point(data = dataplot_median, aes(x = as.numeric(Timepoint_ID)-1, y = median_VL, fill = Trt),
+               size = 3.5, shape = 24, col = "black") +
     scale_shape_manual(values = c(25, 21), guide = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
     scale_fill_manual(label = labels, values = colors, name = "") +
     theme_bw() +
-    scale_y_continuous(labels=label_math(), breaks = seq(0,10,2), limits = c(0,9)) +
+    # set x axis to continuous with integer breaks labeled by Timepoint_ID levels
+    scale_x_continuous(breaks = seq_along(levels(dataplot$Timepoint_ID))-1,
+                       labels = levels(dataplot$Timepoint_ID)) +
+    scale_y_continuous(labels = label_math(), breaks = seq(0,10,2), limits = c(0,9)) +
     xlab("Time since randomisation (days)") +
     ylab("Viral densities (genomes/mL)") + 
     theme(axis.title  = element_text(face = "bold"),
@@ -741,13 +749,14 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
           axis.text = element_text(size = 10),
           strip.text = element_text(size = 10, face = 'bold')) +
     geom_hline(yintercept = 0, col = "red", linetype = "dashed", linewidth = 0.75) +
-    geom_text(data = f_tab, x = 6, y = 9, aes(label = lab),
+    geom_text(data = f_tab, x = 5, y = 9, aes(label = lab),
               hjust = 1, vjust = 1) +
     ggtitle("Viral density dynamics") 
   
   if(fluType){G <- G +  facet_grid(fluType~Trt)} else {G <- G +  facet_grid(.~Trt)}
   G
 }
+
 
 slope_to_hl  <- function(slope){
   24*log10(2)/(-(slope)) 
@@ -757,10 +766,17 @@ formatter <- function(x){
   (x-1)*100 
 }
 
-plot_hl <- function(Half_life, trt_colors){
+plot_hl <- function(Half_life, trt_colors, trt_order){
   Half_life$fluType <- as.factor(Half_life$fluType)
   levels(Half_life$fluType) <- paste0("Influenza ", levels(Half_life$fluType))
-  
+
+  Half_life <- Half_life %>%
+      mutate(Trt = factor(Trt, levels = rev(trt_order))) %>%
+      arrange(Trt, t_12_med) %>%
+      mutate(ID = factor(ID, levels = unique(ID)))
+    
+
+
   Half_life_med <- Half_life %>%
     group_by(Trt) %>%
     summarise(med_hl = median(t_12_med))  %>%
@@ -777,7 +793,8 @@ plot_hl <- function(Half_life, trt_colors){
     as.data.frame()
   f_tab$med_hl <- Half_life_med$med_hl
   
-  f_tab$lab <- paste0(f_tab$Trt,": n = ", f_tab$n, "; half-life = ", round(f_tab$med_hl,1), " h")
+  f_tab$lab <- paste0(f_tab$Trt, " (n = ", f_tab$n, "): ", sprintf("%.1f", f_tab$med_hl), " h")
+  f_tab <- f_tab %>% arrange(match(Trt, (trt_order)))
   freq_lab <- paste(f_tab$lab, collapse = '\n')
   
   
@@ -785,7 +802,7 @@ plot_hl <- function(Half_life, trt_colors){
     geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up),width = 0, alpha = 0.4) +
     geom_point(size = 2.5, aes(shape = fluType)) +
     geom_vline(data = Half_life_med, aes(xintercept = med_hl, col = Trt),linewidth = 1) +
-    theme_bw() +  
+    theme_bw(base_size = 14) +  
     scale_y_discrete(expand = c(0.01,0.01), breaks = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
     scale_shape_manual(values = c(16, 17), name = "") +
@@ -806,63 +823,90 @@ plot_hl <- function(Half_life, trt_colors){
     xlab("Estimated viral clearance half-life (h)") +
     ylab("") +
     ggtitle("A) Individual viral clearance half-life\n") +
-    annotate("text", x = max(Half_life$t_12_med) * 0.4, y = nrow(Half_life)/5, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
+    annotate("text", x = 32, y = nrow(Half_life)/5, label = freq_lab, hjust = 0, vjust = 1, size = 4) 
   G
   
   
 }
 
-plot_hl_flutype <- function(Half_life, trt_colors){
-  
-  
-  Half_life$fluType <- as.factor(Half_life$fluType)
-  levels(Half_life$fluType) <- paste0("Influenza ", levels(Half_life$fluType))
-  
-  Half_life_med <- Half_life %>%
-    group_by(Trt, fluType) %>%
-    summarise(med_hl = median(t_12_med))  %>%
+
+plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
+  Half_life <- Half_life |>
+    mutate(
+      fluType = as.factor(fluType),
+      fluType = factor(paste0("Influenza ", levels(fluType))[as.integer(fluType)], levels = paste0("Influenza ", unique(fluType)))
+    )
+
+  Half_life <- Half_life |>
+    mutate(Trt = factor(Trt, levels = rev(trt_order))) |>
+    arrange(fluType, Trt, t_12_med) |>
+    mutate(ID = factor(ID, levels = unique(ID)))
+
+  Half_life_med <- Half_life |>
+    group_by(Trt, fluType) |>
+    summarise(med_hl = median(t_12_med, na.rm = TRUE), .groups = "drop") |>
     as.data.frame()
-  
+
   colors <- trt_colors[names(trt_colors) %in% unique(Half_life$Trt)]
   colors <- colors[levels(Half_life$Trt)]
   labels <- names(colors)
-  
-  f_tab <- Half_life %>%
-    distinct(ID, Trt, fluType) %>%
-    group_by(Trt, fluType) %>%
-    summarise(n = n()) %>%
+
+  f_tab <- Half_life |>
+    distinct(ID, Trt, fluType) |>
+    group_by(Trt, fluType) |>
+    summarise(n = n(), .groups = "drop") |>
     as.data.frame()
-  f_tab$med_hl <- Half_life_med$med_hl
-  
-  f_tab$lab <- paste0(f_tab$Trt,": n = ", f_tab$n, "; half-life = ", round(f_tab$med_hl,1), " h")
-  freq_lab <- f_tab %>% group_by(fluType) %>%
-    summarise(freq_lab = paste(lab, collapse = '\n')) 
-  
-  
-  
-  G <- ggplot(Half_life) +
-    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up, y = ID, col = Trt),width = 0, alpha = 0.4) +
-    geom_point(size = 2.5, aes(x = t_12_med, y = ID, col = Trt, shape = fluType)) +
-    geom_vline(data = Half_life_med, aes(xintercept = med_hl, col = Trt),linewidth = 1) +
-    theme_bw() +  
-    scale_y_discrete(expand = c(0.01,0.01), breaks = NULL) +
+
+  f_tab <- f_tab |>
+    left_join(Half_life_med, by = c("Trt", "fluType"))
+
+  f_tab$lab <- paste0(f_tab$Trt, " (n = ", f_tab$n, "): ", sprintf("%.1f", f_tab$med_hl), " h")
+  f_tab <- f_tab %>% arrange(match(Trt, (trt_order)))
+
+  freq_lab <- f_tab |>
+    group_by(fluType) |>
+    summarise(freq_lab = paste(lab, collapse = "\n"), .groups = "drop")
+
+  # X position for per-facet labels (relative)
+  x_max <- max(Half_life$t_12_med, na.rm = TRUE)
+  x_pos <- 33.5
+  freq_lab <- freq_lab |> mutate(x_pos = x_pos)
+
+  G <- ggplot(Half_life, aes(x = t_12_med, y = ID)) +
+    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up, colour = Trt), width = 0, alpha = 0.4) +
+    geom_point(size = 2.5, aes(shape = fluType, colour = Trt)) +
+    geom_vline(data = Half_life_med, aes(xintercept = med_hl, colour = Trt), linewidth = 1) +
+    theme_bw(base_size = 14) +
+    scale_y_discrete(expand = c(0.01, 0.01), breaks = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
     scale_shape_manual(values = c(16, 17), name = "") +
-    scale_x_continuous(breaks = seq(0,40,5), expand = c(0,0)) +
-    guides(color = guide_legend(override.aes=list(linetype = rep(0, length(unique(Half_life$Trt)))))) +
-    theme(axis.text.y = element_blank(),
-          axis.ticks = element_blank(),
-          axis.title = element_text(size = 12, face = "bold"),
-          plot.title = element_text( face = "bold"),
-          legend.position = "bottom",
-          legend.box="vertical",
-          legend.margin=margin()) +
-    coord_cartesian(xlim=c(0, 35)) +
+    scale_x_continuous(breaks = seq(0, 40, 5), expand = c(0, 0)) +
+    guides(color = guide_legend(override.aes = list(linetype = rep(0, length(unique(Half_life$Trt)))))) +
+    theme(
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title = element_text(size = 12, face = "bold"),
+      plot.title = element_text(face = "bold"),
+      legend.position = "bottom",
+      legend.box = "vertical",
+      legend.margin = margin(),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 12, face = "bold")
+    ) +
+    coord_cartesian(xlim = c(0, x_max + 5)) +
     xlab("Estimated viral clearance half-life (h)") +
     ylab("") +
-    ggtitle("A) Individual viral clearance half-life\n") +
-    geom_text(data = freq_lab, x = 17.5, y = nrow(Half_life)/5, aes(label = freq_lab), hjust = 0, vjust = 1, size = 4) +
-    facet_grid(fluType~., scales = 'free_y')
+    ggtitle("Individual viral clearance half-life\n") +
+    geom_text(
+      data = freq_lab,
+      mapping = aes(x = x_pos, label = freq_lab),
+      inherit.aes = FALSE,
+      y = Inf,
+      hjust = 0,
+      vjust = 1.2,
+      size = 3.5
+    ) +   facet_grid(fluType ~ ., scales = "free_y")
+
   G
 }
 
