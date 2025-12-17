@@ -46,8 +46,6 @@ my_probs = c(0.025, 0.1, .5, .9, .975)
 source('functions.R')
 trt_colors = get_trt_colors()
 interim_version <- 6
-
-trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 ```
 
 ## *Load data*
