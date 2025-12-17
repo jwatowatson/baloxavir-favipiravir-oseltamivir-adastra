@@ -6,7 +6,7 @@ editor: visual
 ---
 
 ```{r}
-knitr::opts_chunk$set(cache = T, cache.comments = FALSE,
+knitr::opts_chunk$set(cache = F, cache.comments = FALSE,
                       echo = F, include = TRUE, 
                       fig.width = 8, fig.height = 8,
                       fig.pos = 'H',dev = 'png', dpi = 300)
@@ -41,9 +41,9 @@ adastra_dat = read.csv(here('Analysis_Data', paste0(intervention,'_analysis.csv'
 adastra_dat <- adastra_dat %>% distinct(ID, .keep_all = T)
 
 temp_dat <- read.csv(paste0('Analysis_Data/', intervention,'_fever_analysis.csv'))
-
-temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt", "Rand_date")],
-                  by.x = "Label", by.y = "ID")
+temp_dat = temp_dat %>% filter(visit != 'D0H1')
+temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt")],
+                  by.x = "Label", by.y = "ID") 
 IDs <- unique(temp_dat$Label)
 
 trts = unique(adastra_dat$Trt)
