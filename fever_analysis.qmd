@@ -83,8 +83,10 @@ temp_dat_for_plot <- cal_fever_clearance(temp_dat, threshold, window_clear)
 
 
 ```{r}
-fit <- survfit(Surv(clearance_time, clearance_time_cens) ~ Trt, data = temp_dat_for_plot) 
-diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = temp_dat_for_plot) 
+summary_temp_values = temp_dat_for_plot %>% distinct(Label, .keep_all = T)
+fit <- survfit(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_temp_values) 
+diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_temp_values) 
+
 p_val <- pchisq(diff$chisq, length(diff$n)-1, lower.tail = FALSE)
 p_val
 ```
