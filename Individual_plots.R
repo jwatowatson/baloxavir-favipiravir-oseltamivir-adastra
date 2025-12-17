@@ -12,7 +12,7 @@ df = df %>% group_by(ID) %>%
     mITT = ifelse(use_threshold, baseline_vl > log10(mITT_threshold), T),
     all_negative = ifelse(all(CT == 40), T, F),
     ID_Trt = paste(ID, Trt, sep = " - "),
-    ID = factor(ID)) %>%
+    ID_Trt = factor(ID_Trt)) %>%
   group_by(ID, Timepoint_ID) %>%
     mutate(CTmean = mean(CT)) %>% filter(Timepoint_ID<6) %>% 
   arrange(Site, Trt, ID)

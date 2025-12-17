@@ -112,7 +112,7 @@ print(table(Intervention=pop_table$Trt))
 ## Plot recruitment
 
 ```{r timeline}
-timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluType))
+timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluType), trt_order)
 timeline
 ```
 
@@ -128,13 +128,14 @@ dev.off()
 
 ```{r}
 mITT_plot <- plot_mITT(adastra_dat)
+mITT_plot <- mITT_plot + theme(base_size = 16)
 mITT_plot
 ```
 
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_mITT_timeline.png"))
 
-png(plot_name, width = 12, height = 6, units = "in", res = 600)
+png(plot_name, width = 10, height = 8, units = "in", res = 350)
 mITT_plot
 dev.off()
 ```
@@ -271,7 +272,7 @@ dev.off()
 ```
 
 ```{r box_vl, warning=F}
-box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F)
+box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F, trt_order)
 box_vl
 ```
 
@@ -347,7 +348,7 @@ save(model_settings,
 library(tictoc)
 tic()  # Start timing
 
-RUN_MODELS <- T
+RUN_MODELS <- F
 
 if(RUN_MODELS){
   system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
@@ -443,7 +444,7 @@ Half_life
 
 ```{r}
 Half_life %>%
-  group_by(fluType, Trt) %>%
+  group_by(Trt) %>%
   summarise(med = median(t_12_med) %>% round(1),
             q1 = quantile(t_12_med,0.25) %>% round(1),
             q3 = quantile(t_12_med, 0.75) %>% round(1),
@@ -478,21 +479,8 @@ G2
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_t12_trt.png"))
 
-png(plot_name, width = 15, height = 8, units = "in", res = 350)
+png(plot_name, width = 15, height = 9, units = "in", res = 350)
 plot_grid(G_hl, G2, ncol = 2, align = "hv")
-dev.off()
-```
-
-```{r}
-G3 <- plot_trt_effs_2(effect_ests = effect_ests, model_cols = model_cols, -50, 40)
-G3
-```
-
-```{r}
-plot_name_pos <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_", ref_arm, ".png"))
-
-png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
-G3
 dev.off()
 ```
 
@@ -500,7 +488,7 @@ dev.off()
 if(ref_arm != "No Study Drug"){
   plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png"))
 
-png(plot_name, width = 6, height = 6, units = "in", res = 600)
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
 print(G2 + 
         ggtitle(paste0("Estimated treatment effect relative to\n", tolower(ref_arm) , " arm")) 
 )
