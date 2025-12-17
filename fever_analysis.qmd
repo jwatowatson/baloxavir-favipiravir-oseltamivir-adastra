@@ -38,11 +38,13 @@ window_clear <- 1
 
 ```{r}
 adastra_dat = read.csv(here('Analysis_Data', paste0(intervention,'_analysis.csv')))
-adastra_dat <- adastra_dat %>% distinct(ID, .keep_all = T)
+adastra_dat <- adastra_dat %>% filter(Timepoint_ID==0) %>% group_by(ID) %>%
+  mutate(Baseline_VL = mean(log10_viral_load)) %>%
+  distinct(ID, .keep_all = T)
 
 temp_dat <- read.csv(paste0('Analysis_Data/', intervention,'_fever_analysis.csv'))
-temp_dat = temp_dat %>% filter(visit != 'D0H1')
-temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt")],
+temp_dat = temp_dat %>% filter(visit != 'D0H1', Time<=7)
+temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt",'Baseline_VL')],
                   by.x = "Label", by.y = "ID") 
 IDs <- unique(temp_dat$Label)
 
@@ -76,14 +78,14 @@ table(adastra_dat$Fever_Baseline, adastra_dat$Trt)
 
 # temp_dat_for_plot <- temp_dat_new
 temp_dat_for_plot <- cal_fever_clearance(temp_dat, threshold, window_clear)
-# 
+summary_temp_values = temp_dat_for_plot %>% distinct(Label, .keep_all = T)
+
 # temp_dat_for_plot$Trt <- as.factor(temp_dat_for_plot$Trt)
 # temp_dat_for_plot$Trt <- factor(temp_dat_for_plot$Trt, levels = c(ref_arm, trts))
 ```
 
 
 ```{r}
-summary_temp_values = temp_dat_for_plot %>% distinct(Label, .keep_all = T)
 fit <- survfit(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_temp_values) 
 diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_temp_values) 
 
