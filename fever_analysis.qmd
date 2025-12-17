@@ -84,6 +84,14 @@ summary_temp_values = temp_dat_for_plot %>% distinct(Label, .keep_all = T)
 # temp_dat_for_plot$Trt <- factor(temp_dat_for_plot$Trt, levels = c(ref_arm, trts))
 ```
 
+
+individual temperature data
+```{r temp_individ_data}
+temp_dat_for_plot %>% filter(temp>35) %>% ggplot(aes(x=Time, y = temp, colour = Trt, group = Label))+geom_line(alpha=.3)+geom_smooth(aes(group=Trt), se = F,linewidth = 1.5)+xlab('Time since randomisation (days)')+ylab('Temperature (C)')+theme_bw()
+```
+
+
+
 ```{r}
 trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 
