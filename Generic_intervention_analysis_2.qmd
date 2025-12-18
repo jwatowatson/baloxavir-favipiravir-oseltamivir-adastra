@@ -576,6 +576,8 @@ trt_effects_pos_rel <- as.data.frame(rel_effect_list)
 
 trt_effects_pos_rel <- as.data.frame(rel_effect_list)
 
+
+
 # Compute posterior probability each column < pos_control
 probs <- colMeans(trt_effects_pos_rel < 0)
 
@@ -589,7 +591,7 @@ for (nm in names(probs)) {
 
 ```
 
-```{# {r}
+```{r}
 
 # # Compute quantiles for each treatment arm (column)
 # effect_ests_pos_rel <- apply(trt_effects_pos_rel, 2, quantile, probs = my_probs, na.rm = TRUE)
