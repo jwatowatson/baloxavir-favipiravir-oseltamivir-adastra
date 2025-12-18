@@ -641,42 +641,45 @@ get_trt_colors = function(){
 
 plot_baseline_vl <- function(Baseline_data){
   
-  Baseline_data$symptomDay <- as.factor(Baseline_data$symptomDay)
+  #Baseline_data$symptomDay <- as.factor(Baseline_data$symptomDay)
   
   G1 <- ggplot(Baseline_data, aes(x = fluType, y = Baseline.viral.load)) +
-    geom_jitter(width = 0.1, size = 3, alpha = 0.75, aes(col = fluType)) +
-    geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8) +
-    theme_bw() +
-    scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
+    geom_jitter(width = 0.2, size = 1.5, alpha = 0.5, aes(col = fluType), show.legend = FALSE) +
+    geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8, show.legend = FALSE) +
+    theme_bw(base_size = 18) +
+    scale_color_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
     scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
-    guides(shape = guide_legend(override.aes = list(size = 4))) +
     xlab("") +
-    ylab("Baseline viral densities (log10 genomes/mL)") +
-    theme(axis.text = element_text(size = 11),
-          axis.title = element_text(size = 12, face = "bold"),
-          plot.title = element_text(size = 14, face = "bold"),
-          panel.spacing = unit(1, "lines")
+    ylab("Admission viral densities\n(copies/mL)") +
+    scale_x_discrete(labels = function(x) paste("Influenza", x)) +
+    scale_y_continuous(labels = scales::math_format(10^.x), limits = c(0, 8)) +
+    theme(
+      axis.title = element_text(face = "bold"),
+      plot.title = element_blank(),
+      panel.spacing = unit(1, "lines"),
+      legend.position = "none"
     )
   
-  G2 <- ggplot(Baseline_data, aes(x = symptomDay, y = Baseline.viral.load)) +
-    geom_point(position=position_jitterdodge(dodge.width=0.8, jitter.width = 0.2), size = 3, alpha = 0.75, aes(col = fluType)) +
-    geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8, position=position_dodge(width=0.8)) +
-    theme_bw() +
-    scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
-    scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
-    guides(shape = guide_legend(override.aes = list(size = 4))) +
-    xlab("Time since symptom onset (days)") +
-    ylab("Baseline viral densities (log10 genomes/mL)") +
-    theme(axis.text = element_text(size = 11),
-          axis.title = element_text(size = 12, face = "bold"),
-          plot.title = element_text(size = 14, face = "bold"),
-          panel.spacing = unit(1, "lines")
-    )
+  G1
   
-  ggarrange(G1, G2, ncol = 2, labels = "AUTO", common.legend = T, legend = "right")
+  # G2 <- ggplot(Baseline_data, aes(x = symptomDay, y = Baseline.viral.load)) +
+  #   geom_point(position=position_jitterdodge(dodge.width=0.8, jitter.width = 0.2), size = 3, alpha = 0.75, aes(col = fluType)) +
+  #   geom_boxplot(width = 0.5, alpha = 0.2, aes(fill = fluType), size = 0.8, position=position_dodge(width=0.8)) +
+  #   theme_bw() +
+  #   scale_color_manual(values = c("#EE4266", "#387ADF"), name = "Influenza type")  +
+  #   scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
+  #   guides(shape = guide_legend(override.aes = list(size = 4))) +
+  #   xlab("Time since symptom onset (days)") +
+  #   ylab("Baseline viral densities (log10 genomes/mL)") +
+  #   theme(axis.text = element_text(size = 11),
+  #         axis.title = element_text(size = 12, face = "bold"),
+  #         plot.title = element_text(size = 14, face = "bold"),
+  #         panel.spacing = unit(1, "lines")
+  #   )
+  
+  # ggarrange(G1, G2, ncol = 2, labels = "AUTO", common.legend = T, legend = "right")
   
 }
-
 
 
 plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
@@ -749,7 +752,7 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
                        labels = levels(dataplot$Timepoint_ID)) +
     scale_y_continuous(labels = label_math(), breaks = seq(0,10,2), limits = c(0,8)) +
     xlab("Time since randomisation (days)") +
-    ylab("Viral densities\n(genomes/mL)") + 
+    ylab("Viral densities\n(copies/mL)") + 
     theme(axis.title  = element_text(face = "bold"),
           plot.title = element_blank(),
           legend.position = "none",
@@ -1119,8 +1122,8 @@ plot_inds <- function(model_selects, Baseline_data){
         plot.title = element_text(face = "bold", hjust = 0.5, size = 8),
         legend.position = "none",
         plot.margin = unit(c(0.1,0.1,0.1,0.1), 'lines')) +
-      scale_color_manual(values = c("#1640D6", "#BE3144"), name = "Model") +
-      scale_fill_manual(values = c("#1640D6", "#BE3144"), name = "Model") +
+      scale_color_manual(values = c("#1640D6", "#BE3144"), name = "Model", guide = NULL) +
+      scale_fill_manual(values = c("#1640D6", "#BE3144"), name = "Model", guide = NULL) +
       scale_shape_manual(values = c(6, 1), guide = "none", drop=FALSE) +
       geom_hline(yintercept = 0, col = "red", linetype = "dashed") +
       ggtitle(lab)

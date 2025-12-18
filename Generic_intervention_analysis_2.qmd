@@ -67,7 +67,7 @@ if (ref_arm == 'No Study Drug') {
   study_threshold <- 0.9 # Test for non-inferiority
 }
 
-mITT_threshold <- 250
+mITT_threshold <- 0
 use_threshold = T
 ```
 
@@ -254,7 +254,7 @@ G_baseline_vl
 
 fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
 
-png(fname, width = 8, height = 4, units = "in", res = 600)
+png(fname, width = 8, height = 6, units = "in", res = 600)
 G_baseline_vl
 dev.off()
 ```
@@ -355,7 +355,7 @@ save(model_settings,
 library(tictoc)
 tic()  # Start timing
 
-RUN_MODELS <- F
+RUN_MODELS <- T
 
 if(RUN_MODELS){
   system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
@@ -500,16 +500,16 @@ dev.off()
 ```
 
 ```{r}
-G3 <- plot_trt_effs_2(effect_ests = effect_ests, model_cols = model_cols, -50, 40)
-G3
+# G3 <- plot_trt_effs_2(effect_ests = effect_ests, model_cols = model_cols, -50, 40)
+# G3
 ```
 
 ```{r}
-plot_name_pos <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_", ref_arm, ".png"))
+# plot_name_pos <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_", ref_arm, ".png"))
 
-png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
-G3
-dev.off()
+# png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
+# G3
+# dev.off()
 ```
 
 ```{r}
@@ -519,8 +519,6 @@ if(ref_arm != "No Study Drug"){
 png(plot_name, width = 8, height = 6, units = "in", res = 600)
 print(G2) 
 dev.off()
-  
-  
 }
 ```
 
@@ -537,9 +535,9 @@ for(j in ind){
                        names(effect_ests)[j],
                        rownames(effect_ests_rep)[i],
                        ref_arm,
-                       round(effect_ests_rep[i, 3],2),
-                       round(effect_ests_rep[i, 1],2),
-                       round(effect_ests_rep[i, 5],2)
+                       round(effect_ests_rep[i, 3]),
+                       round(effect_ests_rep[i, 1]),
+                       round(effect_ests_rep[i, 5])
     )
     )
   }
@@ -574,10 +572,6 @@ for (trt in setdiff(colnames(trt_effect), pos_control)) {
 # Combine into a data frame
 trt_effects_pos_rel <- as.data.frame(rel_effect_list)
 
-trt_effects_pos_rel <- as.data.frame(rel_effect_list)
-
-
-
 # Compute posterior probability each column < pos_control
 probs <- colMeans(trt_effects_pos_rel < 0)
 
@@ -586,6 +580,32 @@ for (nm in names(probs)) {
   message(sprintf(
     "Posterior probability that %s has treatment effect less than %s: %.3f",
     nm, pos_control, probs[nm]
+  ))
+}
+
+```
+
+```{r}
+ind <- which(model_settings$trt_formulas == 1)
+load(ff[ind])
+
+trt_effect <- rstan::extract(out, pars = 'trt_effect')$trt %>% as.data.frame()
+trts <- setdiff(trt_intervention, ref_arm)
+colnames(trt_effect) = trts
+
+threshold <- study_threshold - 1
+
+prob_below <- trt_effect |>
+  as_tibble() |>
+  summarize(across(everything(), ~ mean(.x < threshold, na.rm = TRUE))) |>
+  pivot_longer(everything(), names_to = "treatment", values_to = "prob_below_threshold")
+
+# Report to console using sprintf
+for (i in seq_len(nrow(prob_below))) {
+  cat(sprintf(
+    "Probability of trt below NI threshold for %s = %.1f%%\n",
+    prob_below$treatment[i],
+    100 * prob_below$prob_below_threshold[i]
   ))
 }
 
@@ -690,104 +710,104 @@ for (nm in names(probs)) {
 ```
 
 ```{r}
-# Initialize message list
-posterior_messages <- list()
+# # Initialize message list
+# posterior_messages <- list()
 
-# 1. Compare each treatment vs reference (e.g., NSD)
-for (j in seq_along(trts)) {
-  prob <- mean(trt_effect[, j] > 0)
-  msg <- sprintf(
-    'Posterior probability for treatment efficacy of %s greater than %s is %.3f',
-    trts[j], ref_arm, prob
-  )
-  posterior_messages <- c(posterior_messages, msg)
-}
+# # 1. Compare each treatment vs reference (e.g., NSD)
+# for (j in seq_along(trts)) {
+#   prob <- mean(trt_effect[, j] > 0)
+#   msg <- sprintf(
+#     'Posterior probability for treatment efficacy of %s greater than %s is %.3f',
+#     trts[j], ref_arm, prob
+#   )
+#   posterior_messages <- c(posterior_messages, msg)
+# }
 
-# 2. Compare all unique pairs of treatments
-for (j in 1:(length(trts)-1)) {
-  for (k in (j+1):length(trts)) {
-    prob <- sum(trt_effect[, j] > trt_effect[, k]) / nrow(trt_effect)
-    msg <- sprintf(
-      'Posterior probability for treatment efficacy of %s greater than %s is %.3f',
-      trts[j], trts[k], prob
-    )
-    posterior_messages <- c(posterior_messages, msg)
-  }
-}
+# # 2. Compare all unique pairs of treatments
+# for (j in 1:(length(trts)-1)) {
+#   for (k in (j+1):length(trts)) {
+#     prob <- sum(trt_effect[, j] > trt_effect[, k]) / nrow(trt_effect)
+#     msg <- sprintf(
+#       'Posterior probability for treatment efficacy of %s greater than %s is %.3f',
+#       trts[j], trts[k], prob
+#     )
+#     posterior_messages <- c(posterior_messages, msg)
+#   }
+# }
 
-# 3. Print all messages
-writeLines(unlist(posterior_messages))
+# # 3. Print all messages
+# writeLines(unlist(posterior_messages))
 ```
 
 ```{r}
-# Define labels
-row_names <- c(ref_arm, trts[1:(length(trts) - 1)])
-col_names <- trts
+# # Define labels
+# row_names <- c(ref_arm, trts[1:(length(trts) - 1)])
+# col_names <- trts
 
-# Initialize plot list
-plot_list <- list()
-plot_idx <- 1
+# # Initialize plot list
+# plot_list <- list()
+# plot_idx <- 1
 
-# Row 1: trts[j] vs NSD (ref_arm)
-for (j in seq_along(trts)) {
-  diff <- trt_effect[, j]
-  prob <- mean(diff > 0)
+# # Row 1: trts[j] vs NSD (ref_arm)
+# for (j in seq_along(trts)) {
+#   diff <- trt_effect[, j]
+#   prob <- mean(diff > 0)
 
-  p <- ggplot(data.frame(diff = diff), aes(x = diff)) +
-    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
-    #ggtitle(sprintf("Pr[%s > %s] = %.2f", trts[j], ref_arm, prob)) +
-    theme_minimal()
+#   p <- ggplot(data.frame(diff = diff), aes(x = diff)) +
+#     geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+#     geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+#     #ggtitle(sprintf("Pr[%s > %s] = %.2f", trts[j], ref_arm, prob)) +
+#     theme_minimal()
 
-  plot_list[[plot_idx]] <- p
-  plot_idx <- plot_idx + 1
-}
+#   plot_list[[plot_idx]] <- p
+#   plot_idx <- plot_idx + 1
+# }
 
-# Row 2 and 3: only upper-triangle drug comparisons (k > j)
-for (j in 1:(length(trts) - 1)) {
-  for (k in 1:length(trts)) {
-    if (k <= j) {
-      # Lower triangle or diagonal: leave blank
-      plot_list[[plot_idx]] <- ggplot() + theme_void()
-    } else {
-      diff <- trt_effect[, k] - trt_effect[, j]
-      prob <- mean(diff > 0)
+# # Row 2 and 3: only upper-triangle drug comparisons (k > j)
+# for (j in 1:(length(trts) - 1)) {
+#   for (k in 1:length(trts)) {
+#     if (k <= j) {
+#       # Lower triangle or diagonal: leave blank
+#       plot_list[[plot_idx]] <- ggplot() + theme_void()
+#     } else {
+#       diff <- trt_effect[, k] - trt_effect[, j]
+#       prob <- mean(diff > 0)
 
-      p <- ggplot(data.frame(diff = diff), aes(x = diff)) +
-        geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
-        geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
-        #ggtitle(sprintf("Pr[%s > %s] = %.2f", trts[k], trts[j], prob)) +
-        theme_minimal()
+#       p <- ggplot(data.frame(diff = diff), aes(x = diff)) +
+#         geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+#         geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+#         #ggtitle(sprintf("Pr[%s > %s] = %.2f", trts[k], trts[j], prob)) +
+#         theme_minimal()
 
-      plot_list[[plot_idx]] <- p
-    }
-    plot_idx <- plot_idx + 1
-  }
-}
+#       plot_list[[plot_idx]] <- p
+#     }
+#     plot_idx <- plot_idx + 1
+#   }
+# }
 
-# Ensure exactly 9 plots
-while (length(plot_list) < 9) {
-  plot_list[[length(plot_list) + 1]] <- ggplot() + theme_void()
-}
+# # Ensure exactly 9 plots
+# while (length(plot_list) < 9) {
+#   plot_list[[length(plot_list) + 1]] <- ggplot() + theme_void()
+# }
 
-posterior_plot <- grid.arrange(
-  grobs = plot_list[1:9],
-  nrow = 3, ncol = 3,
-  top = textGrob("Pr[Trtₓ > Trtᵧ | Data]", gp = gpar(fontsize = 16, fontface = "bold")),
-  left = textGrob("Trtᵧ (Comparator)", rot = 90, gp = gpar(fontsize = 12, fontface = "italic")),
-  bottom = textGrob("Trtₓ (Reference)", gp = gpar(fontsize = 12, fontface = "italic"))
-)
+# posterior_plot <- grid.arrange(
+#   grobs = plot_list[1:9],
+#   nrow = 3, ncol = 3,
+#   top = textGrob("Pr[Trtₓ > Trtᵧ | Data]", gp = gpar(fontsize = 16, fontface = "bold")),
+#   left = textGrob("Trtᵧ (Comparator)", rot = 90, gp = gpar(fontsize = 12, fontface = "italic")),
+#   bottom = textGrob("Trtₓ (Reference)", gp = gpar(fontsize = 12, fontface = "italic"))
+# )
 
-posterior_plot
+# posterior_plot
 ```
 
 ```{r}
-plot_name <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention, "_mITT_", mITT_threshold, "_posterior_comparison.png")
+# plot_name <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention, "_mITT_", mITT_threshold, "_posterior_comparison.png")
 
-png(plot_name, width = 800, height = 600)
+# png(plot_name, width = 800, height = 600)
 
-posterior_plot
-dev.off()
+# posterior_plot
+# dev.off()
 
 ```
 
@@ -795,7 +815,7 @@ dev.off()
 
 ```{r}
 # Select model without interaction term
-model_selects <- which(model_settings$trt_formulas == 1)
+model_selects <- main_mod
 
 ind_plot_list <- plot_inds(model_selects, Baseline_data)
 ind_plot_all <- ggarrange(plotlist =  ind_plot_list, nrow = 8, ncol = 5, common.legend = T, legend = "right")
@@ -804,11 +824,11 @@ ind_plot_all
 
 ```{r}
 for(i in 1:length(ind_plot_all)){
-  fname <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention,  "_mITT_", mITT_threshold, "_individual_", i, ".pdf")
+  fname <-  here("Plots", intervention, "Individual_plots", paste0(intervention,  "_mITT_", mITT_threshold, "_individual_", i, ".png"))
   
-  pdf(fname, width = 12, height = 12)
+  png(fname, width = 12, height = 12, unit = 'in', res = 350)
   print(annotate_figure( ind_plot_all[[i]], bottom = textGrob("Time since randomisation (days)", vjust = 0.5, gp = gpar(cex = 1.2, fontface="bold")),
-                         left = textGrob("Viral densities (genomes/mL)", rot = 90, gp = gpar(cex = 1.2, fontface="bold"))))
+                         left = textGrob("Viral densities (copies/mL)", rot = 90, gp = gpar(cex = 1.2, fontface="bold"))))
   dev.off()
   
 }

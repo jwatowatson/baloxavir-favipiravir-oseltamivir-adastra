@@ -93,3 +93,11 @@ A
 dev.off()
 
 
+effect_ests_plots %>%
+  mutate(lab = paste0(
+    round((med-1)*100),
+    "% [95%CrI: ",
+    round((L95-1)*100),
+    " to ",
+    round((U95-1)*100),
+    "%]"))
