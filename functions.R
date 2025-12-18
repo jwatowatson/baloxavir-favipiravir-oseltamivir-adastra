@@ -628,8 +628,8 @@ get_trt_colors = function(){
       "Oseltamivir")
   trt_cols['No Study Drug'] = viridis::viridis(n = 10)[8]
   trt_cols['Oseltamivir'] = viridis::magma(n = 10)[8]
-  trt_cols['Favipiravir'] = viridis::plasma(n = 100)[92]
-  trt_cols['Oseltamivir'] = viridis::plasma(n = 10)[1]
+  trt_cols['Favipiravir'] = "#F79A19" #viridis::plasma(n = 100)[92]
+  trt_cols['Oseltamivir'] =  "#4D55CC" #viridis::plasma(n = 10)[1]
   trt_cols['Baloxavir'] = viridis::inferno(n = 10)[5]
   trt_cols['Molnupiravir'] = viridis::inferno(n = 10)[7]
   
@@ -678,10 +678,15 @@ plot_baseline_vl <- function(Baseline_data){
 }
 
 
+
 plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
   dataplot <- dataplot %>%
     distinct(ID, Timepoint_ID, daily_VL, .keep_all = T) %>%
     filter(Timepoint_ID <= 5) 
+
+  med_log10_cens_vl <-  dataplot %>%
+    distinct(Plate, .keep_all = T) %>%
+    summarise(med_log10_cens_vl = median(log10_cens_vl, na.rm = T)) %>% pull(med_log10_cens_vl)
   
   if(!is.null(trt_order)) {
     dataplot$Trt <- factor(dataplot$Trt, levels = trt_order)
@@ -722,12 +727,14 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
   
   # numeric x positions for boxplots/medians (1..5); continuous Time for points
   G <- ggplot(dataplot, aes(y = daily_VL, fill = Trt)) +
+    geom_hline(yintercept = med_log10_cens_vl, col = "#CF0F0F", linetype = "31", 
+               linewidth = 0.5, alpha = 0.75) +
     # points placed at continuous Time
     geom_point(data = dataplot, aes(x = Time, y = daily_VL, shape = censor, fill = Trt),
-               alpha = 0.25, size = 1.5, stroke = 0.5) +
+               alpha = 0.35, size = 1.5, stroke = 0.05) +
     # boxplots centered at integer positions (as.numeric(Timepoint_ID)); group by Timepoint_ID
     geom_boxplot(data = dataplot, aes(x = as.numeric(Timepoint_ID)-1, y = daily_VL, group = Timepoint_ID, fill = Trt),
-                 width = 0.65, size = 0.5, outlier.shape = NA, coef = 0, alpha = 0.3) +
+                 width = 0.65, size = 0.25, outlier.shape = NA, coef = 0, alpha = 0.3) +
     # median line/points at integer positions
     geom_line(data = dataplot_median, aes(x = as.numeric(Timepoint_ID)-1, y = median_VL, group = Trt, col = Trt),
               linewidth = 1.2, linetype = 1) +
@@ -736,27 +743,25 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
     scale_shape_manual(values = c(25, 21), guide = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
     scale_fill_manual(label = labels, values = colors, name = "") +
-    theme_bw() +
+    theme_bw(base_size = 14) +
     # set x axis to continuous with integer breaks labeled by Timepoint_ID levels
     scale_x_continuous(breaks = seq_along(levels(dataplot$Timepoint_ID))-1,
                        labels = levels(dataplot$Timepoint_ID)) +
-    scale_y_continuous(labels = label_math(), breaks = seq(0,10,2), limits = c(0,9)) +
+    scale_y_continuous(labels = label_math(), breaks = seq(0,10,2), limits = c(0,8)) +
     xlab("Time since randomisation (days)") +
-    ylab("Viral densities (genomes/mL)") + 
+    ylab("Viral densities\n(genomes/mL)") + 
     theme(axis.title  = element_text(face = "bold"),
-          plot.title = element_text(face = "bold"),
+          plot.title = element_blank(),
           legend.position = "none",
-          axis.text = element_text(size = 10),
-          strip.text = element_text(size = 10, face = 'bold')) +
-    geom_hline(yintercept = 0, col = "red", linetype = "dashed", linewidth = 0.75) +
-    geom_text(data = f_tab, x = 5, y = 9, aes(label = lab),
+          axis.text = element_text(),
+          strip.text = element_text(face = 'bold')) +
+    geom_text(data = f_tab, x = 5, y = 7.5, aes(label = lab),
               hjust = 1, vjust = 1) +
     ggtitle("Viral density dynamics") 
   
   if(fluType){G <- G +  facet_grid(fluType~Trt)} else {G <- G +  facet_grid(.~Trt)}
   G
 }
-
 
 slope_to_hl  <- function(slope){
   24*log10(2)/(-(slope)) 
@@ -794,19 +799,21 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
   freq_lab <- paste(f_tab$lab, collapse = "\n")
   
   G <- ggplot(Half_life, aes(x = t_12_med, y = ID, col = Trt)) +
-    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up), width = 0, alpha = 0.4) +
-    geom_point(size = 2.5, shape = 16) +  # <- always circles
+    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up), width = 0, alpha = 0.45, linewidth = 0.35) +
+    geom_point(size = 2, shape = 21, alpha = 0.75, aes(fill = Trt), 
+              col = 'black', stroke = 0.05) +  
     geom_vline(data = Half_life_med, aes(xintercept = med_hl, col = Trt), linewidth = 1) +
-    theme_bw(base_size = 14) +
+    theme_bw(base_size = 18) +
     scale_y_discrete(expand = c(0.01, 0.01), breaks = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
+    scale_fill_manual(label = labels, values = colors, name = "") +
     scale_x_continuous(breaks = seq(0, 40, 5), expand = c(0, 0)) +
     guides(color = guide_legend(override.aes = list(linetype = 0))) +
     theme(
       axis.text.y = element_blank(),
-      axis.ticks = element_blank(),
+      axis.ticks.y = element_blank(),
       axis.title = element_text(face = "bold"),
-      plot.title = element_text(face = "bold"),
+      plot.title = element_blank(),
       legend.position = "bottom",
       legend.box = "vertical",
       legend.margin = margin(),
@@ -820,8 +827,8 @@ plot_hl <- function(Half_life, trt_colors, trt_order){
       "text",
       x = Inf, y = Inf,                 # <- anchor to top-right
       label = freq_lab,
-      hjust = 1.02, vjust = 1.1,        # <- nudge inward (tweak if needed)
-      size = 4
+      hjust = 1.02, vjust = 1.2,        # <- nudge inward (tweak if needed)
+      size = 5
     )
   
   G
@@ -871,20 +878,21 @@ plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
   freq_lab <- freq_lab |> mutate(x_pos = x_pos)
   
   G <- ggplot(Half_life, aes(x = t_12_med, y = ID)) +
-    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up, colour = Trt), width = 0, alpha = 0.4) +
-    geom_point(size = 2.5, aes(shape = fluType, colour = Trt)) +
+    geom_errorbar(aes(xmin = t_12_low, xmax = t_12_up, colour = Trt), width = 0, alpha = 0.45) +
+    geom_point(size = 2, shape = 21, alpha = 0.75, aes(fill = Trt), 
+              col = 'black', stroke = 0.05) +      
     geom_vline(data = Half_life_med, aes(xintercept = med_hl, colour = Trt), linewidth = 1) +
-    theme_bw(base_size = 14) +
+    theme_bw(base_size = 18) +
     scale_y_discrete(expand = c(0.01, 0.01), breaks = NULL) +
     scale_color_manual(label = labels, values = colors, name = "") +
-    scale_shape_manual(values = c(16, 17), name = "") +
+    scale_fill_manual(label = labels, values = colors, name = "") +
     scale_x_continuous(breaks = seq(0, 40, 5), expand = c(0, 0)) +
     guides(color = guide_legend(override.aes = list(linetype = rep(0, length(unique(Half_life$Trt)))))) +
     theme(
       axis.text.y = element_blank(),
       axis.ticks = element_blank(),
       axis.title = element_text( face = "bold"),
-      plot.title = element_text(face = "bold"),
+      plot.title = element_blank(),
       legend.position = "bottom",
       legend.box = "vertical",
       legend.margin = margin(),
@@ -898,14 +906,14 @@ plot_hl_flutype <- function(Half_life, trt_colors, trt_order){
       data = freq_lab,
       mapping = aes(x = x_pos, label = freq_lab),
       inherit.aes = FALSE,
-      y = Inf,
-      hjust = 0,
-      vjust = 1.2,
-      size = 3.5
-    ) +   facet_grid(fluType ~ ., scales = "free_y")
+      x = Inf, y = Inf,                 # <- anchor to top-right
+      hjust = 1.03,
+      vjust = 1.15,
+      size = 4
+    ) +   facet_grid(fluType ~ ., scales = "free_y", space = "free_y")
   
   G
-}
+} 
 
 plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   effect_ests_plots <- NULL
@@ -937,9 +945,9 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   G <- ggplot(effect_ests_plots, 
               aes(x = arm, y = med, col = model, group = model)) +
     geom_rect(aes(ymin = min(0.75, min(L95)-0.05), ymax = study_threshold, xmin = 0, xmax = length(my.labs)+1), fill = "#7D7C7C", alpha = 0.2, col = NA) +
-    geom_point(position = position_dodge(width = 0.5), size = 4.5) +
-    geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 1) +
-    geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 2.25) +
+    geom_point(position = position_dodge(width = 0.5), size = 6) +
+    geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 1.25) +
+    geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 3) +
     scale_color_manual(values = model_cols, guide = NULL) +
     coord_flip() +
     theme_bw(base_size = 18) +
@@ -1007,9 +1015,9 @@ plot_trt_effs_2 <- function(effect_ests, model_cols, lower, upper){
     ## Points and error bars:
     geom_point(position = position_dodge(width = 0.5), size = 4) +
     geom_errorbar(aes(ymin = L95, ymax = U95), position = position_dodge(width = 0.5),
-                  width = 0, linewidth = 0.65) +
-    geom_errorbar(aes(ymin = L80, ymax = U80), position = position_dodge(width = 0.5),
                   width = 0, linewidth = 1.5) +
+    geom_errorbar(aes(ymin = L80, ymax = U80), position = position_dodge(width = 0.5),
+                  width = 0, linewidth = 3) +
     
     scale_color_manual(values = model_cols) +
     coord_flip() +
