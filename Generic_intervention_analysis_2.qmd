@@ -516,11 +516,8 @@ dev.off()
 if(ref_arm != "No Study Drug"){
   plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png"))
 
-png(plot_name, width = 6, height = 6, units = "in", res = 600)
-png(plot_name, width = 6, height = 6, units = "in", res = 600)
-print(G2 + 
-        ggtitle(paste0("Estimated treatment effect relative to\n", tolower(ref_arm) , " arm")) 
-)
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(G2) 
 dev.off()
   
   
@@ -553,7 +550,7 @@ for(j in ind){
 
 ```{r, echo=F}
 # Define positive control arm
-pos_control <- "Favipiravir"
+pos_control <- "Baloxavir"
 
 ind <- which(model_settings$trt_formulas == 1)
 
@@ -574,106 +571,122 @@ for (trt in setdiff(colnames(trt_effect), pos_control)) {
   rel_effect_list[[trt]] <- trt_effect[[trt]] - trt_effect[[pos_control]]
 }
 
-# Add the negated Favipiravir as "No Study Drug"
-rel_effect_list[["No Study Drug"]] <- -trt_effect[[pos_control]]
-
 # Combine into a data frame
 trt_effects_pos_rel <- as.data.frame(rel_effect_list)
 
-# Compute quantiles for each treatment arm (column)
-effect_ests_pos_rel <- apply(trt_effects_pos_rel, 2, quantile, probs = my_probs, na.rm = TRUE)
-effect_ests_pos_rel <- as.data.frame(t(effect_ests_pos_rel))
+trt_effects_pos_rel <- as.data.frame(rel_effect_list)
 
-# Manually fix rowname
-rownames(effect_ests_pos_rel)[3] <- "No Study Drug"
+# Compute posterior probability each column < pos_control
+probs <- colMeans(trt_effects_pos_rel < 0)
 
-# Create plotting dataframe
-effect_ests_plot <- effect_ests_pos_rel
-effect_ests_plot <- exp(effect_ests_plot)  # exponentiate estimates
-colnames(effect_ests_plot) <- c("L95", "L80", "med", "U80", "U95")
-effect_ests_plot$arm <- rownames(effect_ests_plot)
-effect_ests_plot$arm <- factor(effect_ests_plot$arm, levels = rownames(effect_ests_plot))  # preserve order
-effect_ests_plot$model <- "Linear"
+# Print a message for each column
+for (nm in names(probs)) {
+  message(sprintf(
+    "Posterior probability that %s has treatment effect less than %s: %.3f",
+    nm, pos_control, probs[nm]
+  ))
+}
 
-# Define threshold and formatting
-pos_threshold <- 0.9
+```
 
-# Set color manually
-model_cols <- c("Linear" = "#1b9e77")
+```{# {r}
+
+
+
+# # Compute quantiles for each treatment arm (column)
+# effect_ests_pos_rel <- apply(trt_effects_pos_rel, 2, quantile, probs = my_probs, na.rm = TRUE)
+# effect_ests_pos_rel <- as.data.frame(t(effect_ests_pos_rel))
+
+# # Manually fix rowname
+# rownames(effect_ests_pos_rel)[3] <- "No Study Drug"
+
+# # Create plotting dataframe
+# effect_ests_plot <- effect_ests_pos_rel
+# effect_ests_plot <- exp(effect_ests_plot)  # exponentiate estimates
+# colnames(effect_ests_plot) <- c("L95", "L80", "med", "U80", "U95")
+# effect_ests_plot$arm <- rownames(effect_ests_plot)
+# effect_ests_plot$arm <- factor(effect_ests_plot$arm, levels = rownames(effect_ests_plot))  # preserve order
+# effect_ests_plot$model <- "Linear"
+
+# # Define threshold and formatting
+# pos_threshold <- 0.9
+
+# # Set color manually
+# model_cols <- c("Linear" = "#1b9e77")
+
+# # # Define plot
+# # my.labs <- levels(effect_ests_plot$arm)
+# # G3 <- ggplot(effect_ests_plot, aes(x = arm, y = med, col = model, group = model)) +
+# #   geom_rect(aes(ymin = 0.9, ymax = 1.1, xmin = 0, xmax = length(my.labs) + 1), 
+# #           fill = "#7D7C7C", alpha = 0.2, col = NA) +
+# #   geom_rect(aes(ymin = min(0.75, min(effect_ests_plot$L95)-0.05), 
+# #               ymax = 0.9, xmin = 0, xmax = length(my.labs) + 1), 
+# #           fill = "#D3D3D3", alpha = 0.2, col = NA) +
+# #   geom_point(position = position_dodge(width = 0.5), size = 4) +
+# #   geom_errorbar(aes(ymin = L95, ymax = U95),
+# #                 position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
+# #   geom_errorbar(aes(ymin = L80, ymax = U80),
+# #                 position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
+# #   geom_hline(yintercept = 1, col = "red", linetype = "dashed") +
+# #   coord_flip() +
+# #   theme_bw() +
+# #   scale_color_manual(values = model_cols) +
+# #   scale_y_continuous(limits = c(min(0.75, min(effect_ests_plot$L95) - 0.05), 
+# #                                 max(effect_ests_plot$U95) + 0.25), 
+# #                      expand = c(0, 0),
+# #                      breaks = seq(0.2, 10, 1)) +
+# #   ylab("Change in viral clearance rate (%)") +
+# #   xlab("") +
+# #   ggtitle(paste0("Estimated treatment effects relative to ", tolower(pos_control), " arm")) +
+# #   theme(axis.title  = element_text(face = "bold"),
+# #         plot.title = element_text(face = "bold"),
+# #         legend.position = "bottom",
+# #         axis.text = element_text(size = 20))
+# # Custom label function
+# percent_rel_label <- function(x) {
+#   paste0(round(100 * (x - 1), 0), "%")
+# }
 
 # # Define plot
 # my.labs <- levels(effect_ests_plot$arm)
 # G3 <- ggplot(effect_ests_plot, aes(x = arm, y = med, col = model, group = model)) +
+#   # Shaded bars
 #   geom_rect(aes(ymin = 0.9, ymax = 1.1, xmin = 0, xmax = length(my.labs) + 1), 
-#           fill = "#7D7C7C", alpha = 0.2, col = NA) +
+#             fill = "#7D7C7C", alpha = 0.2, col = NA) +
 #   geom_rect(aes(ymin = min(0.75, min(effect_ests_plot$L95)-0.05), 
-#               ymax = 0.9, xmin = 0, xmax = length(my.labs) + 1), 
-#           fill = "#D3D3D3", alpha = 0.2, col = NA) +
+#                 ymax = 0.9, xmin = 0, xmax = length(my.labs) + 1), 
+#             fill = "#D3D3D3", alpha = 0.2, col = NA) +
+  
+#   # Points + error bars
 #   geom_point(position = position_dodge(width = 0.5), size = 4) +
 #   geom_errorbar(aes(ymin = L95, ymax = U95),
 #                 position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
 #   geom_errorbar(aes(ymin = L80, ymax = U80),
 #                 position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
+  
+#   # Reference line
 #   geom_hline(yintercept = 1, col = "red", linetype = "dashed") +
+  
 #   coord_flip() +
 #   theme_bw() +
 #   scale_color_manual(values = model_cols) +
 #   scale_y_continuous(limits = c(min(0.75, min(effect_ests_plot$L95) - 0.05), 
-#                                 max(effect_ests_plot$U95) + 0.25), 
+#                      max(effect_ests_plot$U95) + 0.25), 
 #                      expand = c(0, 0),
-#                      breaks = seq(0.2, 10, 1)) +
+#                      breaks = c(0.9, 1.1),
+#                      labels = percent_rel_label) +
 #   ylab("Change in viral clearance rate (%)") +
 #   xlab("") +
-#   ggtitle(paste0("Estimated treatment effects relative to ", tolower(pos_control), " arm")) +
+#   ggtitle(paste0("Estimated treatment effects relative to ", pos_control, " arm")) +
 #   theme(axis.title  = element_text(face = "bold"),
 #         plot.title = element_text(face = "bold"),
 #         legend.position = "bottom",
 #         axis.text = element_text(size = 20))
-# Custom label function
-percent_rel_label <- function(x) {
-  paste0(round(100 * (x - 1), 0), "%")
-}
+# plot_name_pos <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention,  "_mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png")
 
-# Define plot
-my.labs <- levels(effect_ests_plot$arm)
-G3 <- ggplot(effect_ests_plot, aes(x = arm, y = med, col = model, group = model)) +
-  # Shaded bars
-  geom_rect(aes(ymin = 0.9, ymax = 1.1, xmin = 0, xmax = length(my.labs) + 1), 
-            fill = "#7D7C7C", alpha = 0.2, col = NA) +
-  geom_rect(aes(ymin = min(0.75, min(effect_ests_plot$L95)-0.05), 
-                ymax = 0.9, xmin = 0, xmax = length(my.labs) + 1), 
-            fill = "#D3D3D3", alpha = 0.2, col = NA) +
-  
-  # Points + error bars
-  geom_point(position = position_dodge(width = 0.5), size = 4) +
-  geom_errorbar(aes(ymin = L95, ymax = U95),
-                position = position_dodge(width = 0.5), width = 0, linewidth = 0.65) +
-  geom_errorbar(aes(ymin = L80, ymax = U80),
-                position = position_dodge(width = 0.5), width = 0, linewidth = 1.5) +
-  
-  # Reference line
-  geom_hline(yintercept = 1, col = "red", linetype = "dashed") +
-  
-  coord_flip() +
-  theme_bw() +
-  scale_color_manual(values = model_cols) +
-  scale_y_continuous(limits = c(min(0.75, min(effect_ests_plot$L95) - 0.05), 
-                     max(effect_ests_plot$U95) + 0.25), 
-                     expand = c(0, 0),
-                     breaks = c(0.9, 1.1),
-                     labels = percent_rel_label) +
-  ylab("Change in viral clearance rate (%)") +
-  xlab("") +
-  ggtitle(paste0("Estimated treatment effects relative to ", pos_control, " arm")) +
-  theme(axis.title  = element_text(face = "bold"),
-        plot.title = element_text(face = "bold"),
-        legend.position = "bottom",
-        axis.text = element_text(size = 20))
-plot_name_pos <- paste0(prefix_dropbox, "/Interim Analysis Reports/Plots_", interim_version, "/", intervention,  "_mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png")
-
-png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
-G3
-dev.off()
+# png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
+# G3
+# dev.off()
 ```
 
 ```{r}
