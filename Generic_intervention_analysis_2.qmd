@@ -591,8 +591,6 @@ for (nm in names(probs)) {
 
 ```{# {r}
 
-
-
 # # Compute quantiles for each treatment arm (column)
 # effect_ests_pos_rel <- apply(trt_effects_pos_rel, 2, quantile, probs = my_probs, na.rm = TRUE)
 # effect_ests_pos_rel <- as.data.frame(t(effect_ests_pos_rel))
