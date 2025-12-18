@@ -188,8 +188,15 @@ survplot$plot <- survplot$plot +
   ) +
   ggtitle("B) Symptom resolution") +
   annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,1)), vjust=0, hjust = 0)
+```
 
+```{r}
+xlabel <- "Time since randomisation (days)"
 
+survplot$table <- survplot$table +
+                    xlab(xlabel) +
+                    theme(axis.title.x = element_text(face = "bold"),
+                         plot.title = element_text(size = 14))
 survplot
 ```
 

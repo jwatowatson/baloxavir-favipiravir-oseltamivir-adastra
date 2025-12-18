@@ -84,13 +84,11 @@ summary_temp_values = temp_dat_for_plot %>% distinct(Label, .keep_all = T)
 # temp_dat_for_plot$Trt <- factor(temp_dat_for_plot$Trt, levels = c(ref_arm, trts))
 ```
 
-
 individual temperature data
+
 ```{r temp_individ_data}
 temp_dat_for_plot %>% filter(temp>35) %>% ggplot(aes(x=Time, y = temp, colour = Trt, group = Label))+geom_line(alpha=.3)+geom_smooth(aes(group=Trt), se = F,linewidth = 1.5)+xlab('Time since randomisation (days)')+ylab('Temperature (C)')+theme_bw()
 ```
-
-
 
 ```{r}
 trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
@@ -104,8 +102,6 @@ diff=survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_te
 p_val <- pchisq(diff$chisq, length(diff$n)-1, lower.tail = FALSE)
 p_val
 ```
-
-
 
 ```{r}
 rmean_table <- summary(fit)$table %>% as.data.frame()
@@ -153,8 +149,15 @@ survplot$plot <- survplot$plot +
         title = element_blank()
   ) +
   annotate("text", x = 0, y = 0.1, label = lab, vjust=0, hjust = 0)
+```
 
+```{r}
+xlabel <- "Time since randomisation (days)"
 
+survplot$table <- survplot$table +
+                    xlab(xlabel) +
+                    theme(axis.title.x = element_text(face = "bold"),
+                         plot.title = element_text(size = 14))
 survplot
 ```
 
@@ -203,9 +206,11 @@ library(gridExtra)
 survplot_fever <- survplot
 
 grob1 <- arrangeGrob(survplot_fever$plot, survplot_fever$table, ncol = 1, heights = c(2, 1))
+```
+
+```{r}
+# From symptom clearance
 grob2 <- arrangeGrob(survplot$plot, survplot$table, ncol = 1, heights = c(2, 1))
-
-
 ```
 
 ```{r}
