@@ -687,10 +687,6 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
     distinct(ID, Timepoint_ID, daily_VL, .keep_all = T) %>%
     filter(Timepoint_ID <= 5) 
 
-  med_log10_cens_vl <-  dataplot %>%
-    distinct(Plate, .keep_all = T) %>%
-    summarise(med_log10_cens_vl = median(log10_cens_vl, na.rm = T)) %>% pull(med_log10_cens_vl)
-  
   if(!is.null(trt_order)) {
     dataplot$Trt <- factor(dataplot$Trt, levels = trt_order)
   } else {
@@ -703,6 +699,11 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
   dataplot$Timepoint_ID <- as.factor(dataplot$Timepoint_ID)
   
   if(fluType){
+    med_log10_cens_vl <-  dataplot %>%
+      distinct(Plate, .keep_all = T) %>%
+      group_by(fluType) %>%
+      summarise(med_log10_cens_vl = median(log10_cens_vl, na.rm = T)) #%>% pull(med_log10_cens_vl)
+    
     dataplot_median <- dataplot %>%
       group_by(Trt, Timepoint_ID, fluType) %>%
       summarise(median_VL = median(daily_VL), .groups = 'drop');
@@ -712,6 +713,10 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
       summarise(n = n()) %>%
       as.data.frame()
   } else {
+    med_log10_cens_vl <-  dataplot %>%
+      distinct(Plate, .keep_all = T) %>%
+      summarise(med_log10_cens_vl = median(log10_cens_vl, na.rm = T))
+    
     dataplot_median <- dataplot %>%
       group_by(Trt, Timepoint_ID) %>%
       summarise(median_VL = median(daily_VL), .groups = 'drop');
@@ -730,7 +735,7 @@ plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
   
   # numeric x positions for boxplots/medians (1..5); continuous Time for points
   G <- ggplot(dataplot, aes(y = daily_VL, fill = Trt)) +
-    geom_hline(yintercept = med_log10_cens_vl, col = "#CF0F0F", linetype = "31", 
+    geom_hline(data = med_log10_cens_vl, aes(yintercept = med_log10_cens_vl), col = "#CF0F0F", linetype = "31", 
                linewidth = 0.5, alpha = 0.75) +
     # points placed at continuous Time
     geom_point(data = dataplot, aes(x = Time, y = daily_VL, shape = censor, fill = Trt),
