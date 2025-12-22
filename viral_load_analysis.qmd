@@ -29,7 +29,9 @@ library(scales)
 library(cowplot)
 library(grid)
 library(webshot2)
-library(here)
+# library(here)
+library(tictoc)
+
 conflicts_prefer(dplyr::filter)
 
 ## information on software/hardware used
@@ -54,7 +56,7 @@ trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 *Set up analysis*
 
 ```{r load_data}
-intervention = 'interim_firstResults'
+intervention = 'Final'
 
 ref_arm = 'No Study Drug' # Success/futility
 #ref_arm = 'Baloxavir' # Non-inferiority
@@ -74,7 +76,7 @@ use_threshold = T
 ```{r define_population}
 #| echo: false
 # set as file with relevant dataset
-f_name = here("Analysis_Data", paste0(intervention, "_analysis.csv"))
+f_name = "Analysis_Data/Final_analysis.csv"
 adastra_dat = read.csv(f_name)
 adastra_dat <- adastra_dat %>% filter(Trt != 'Molnupiravir')
 adastra_dat$Rand_date = as.POSIXct(adastra_dat$Rand_date)
@@ -115,26 +117,9 @@ timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluT
 timeline
 ```
 
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_recruitment.png"))
-print(plot_name)
-
-png(plot_name, width = 8, height = 6, units = "in", res = 600)
-timeline
-dev.off()
-```
-
-```{r}
+```{r mITT_plot}
 mITT_plot <- plot_mITT(adastra_dat)
 mITT_plot
-```
-
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_mITT_timeline.png"))
-
-png(plot_name, width = 12, height = 6, units = "in", res = 600)
-mITT_plot
-dev.off()
 ```
 
 ## *Baseline characteristics*
@@ -162,13 +147,6 @@ base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T)
 base_vl_plot
 ```
 
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_base_vl_flutype.png"))
-
-png(plot_name, width = 8, height = 4, units = "in", res = 600)
-base_vl_plot
-dev.off()
-```
 
 ### For all analyses
 
@@ -212,13 +190,9 @@ tab.ff
 # save_kable(tab.ff,file = 'Baseline_characteristics.png')
 ```
 
-```{r}
-# kable_path <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_Baseline_characteristics.png")
-# )
-# save_kable(tab.ff, file = kable_path)
-```
 
-```{r}
+
+```{r make_baseline_data}
 Baseline_data %>%
   group_by(Trt) %>%
   summarise(age_q1 = quantile(Age,0.25),
@@ -238,30 +212,13 @@ Baseline_data %>%
             )
 ```
 
-```{r}
-Baseline_data %>%
-  summarise(onset_q1 = quantile(symptomDay,0.25),
-            onset_q2 = quantile(symptomDay,0.5),
-            onset_q3 = quantile(symptomDay,0.75)
-  )
-```
-
 ## Plot Baseline viral loads
 
 ```{r baseline_VL}
 G_baseline_vl <- plot_baseline_vl(Baseline_data)
 G_baseline_vl
-
-fname <- here("Plots", intervention, paste0("Baseline_vl_", "mITT_", mITT_threshold, ".png"))
-
-png(fname, width = 8, height = 6, units = "in", res = 600)
-G_baseline_vl
-dev.off()
 ```
 
-```{r}
-# t.test(Baseline.viral.load ~ fluType, data = Baseline_data)
-```
 
 ## Viral load dynamics
 
@@ -270,26 +227,13 @@ box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T, trt
 box_vl_flutype
 ```
 
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_box_vl_flutype.png"))
-
-png(plot_name, width = 8, height = 6, units = "in", res = 600)
-box_vl_flutype
-dev.off()
-```
 
 ```{r box_vl, warning=F}
 box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F, trt_order)
 box_vl
 ```
 
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_box_vl.png"))
 
-png(plot_name, width = 8, height = 4, units = "in", res = 600)
-box_vl
-dev.off()
-```
 
 ## *Fit models*
 
@@ -308,14 +252,14 @@ covs_base = c('symptomDay','fluType', 'Study_time', 'Age_scaled', 'vaccine')
 covs_full=c(covs_base)
 
 stan_inputs <- list()
-#trt_formulas <- c("~ Trt")
+
 trt_formulas <- c("~ Trt", "~ Trt*fluType")
 for(i in 1:length(trt_formulas)){
   stan_inputs[[i]] = 
     make_stan_inputs(input_data_fit = adastra_dat_analysis,
                      int_covs_base = covs_base,
                      int_covs_full = covs_full,
-                     slope_covs_base = c('fluType','Study_time'),
+                     slope_covs_base = covs_base,
                      slope_covs_full = covs_full,
                      trt_frmla = formula(trt_formulas[i]),
                      Dmax = Dmax)
@@ -325,11 +269,10 @@ for(i in 1:length(trt_formulas)){
 ```{r setup_models}
 all_mods = list.files('Stan_models',full.names = TRUE,pattern = '*stan')
 
-model_settings = expand.grid(mod = all_mods[2], # LinearRNA stan
+model_settings = expand.grid(mod = all_mods[2], # LinearRNaseP stan
                              prior = 1,
                              cov_matrices = 1,
                              trt_formulas = seq_len(length(stan_inputs)))
-                             #trt_formulas = c(1,2)) #c(1,2))
 
 model_settings$Niter = 2000
 model_settings$Nwarmup = 1000
@@ -343,7 +286,7 @@ writeLines(sprintf('We are running all models with %s chains and %s samples for 
                    unique(model_settings$Nthin), 
                    unique(model_settings$Nchain*(model_settings$Niter-model_settings$Nwarmup)/model_settings$Nthin)))
 
-model_setup_f_name = here("Rout", paste0('model_run_setup_',intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+model_setup_f_name = paste0('Rout/model_run_setup_',intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData')
 save(model_settings, 
      adastra_dat_analysis,
      stan_inputs, 
@@ -351,12 +294,10 @@ save(model_settings,
      file = model_setup_f_name)
 ```
 
-```{r}
-library(tictoc)
+
+run the stan models
+```{r run_stan}
 tic()  # Start timing
-
-RUN_MODELS <- T
-
 if(RUN_MODELS){
   system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
 }
@@ -379,11 +320,7 @@ ff = paste0('Rout/',ff)
 *main model selection*
 
 ```{r}
-main_mod = 1# which(model_settings$prior==2&
-#  model_settings$cov_matrices==1&
-# model_settings$mod==all_mods[2] &
-#model_settings$trt_formulas == 1)
-
+main_mod = 1
 model_cols = brewer.pal(n = 8, name = 'Dark2')[1:nrow(model_settings)]
 names(model_cols) = paste('model', 1:nrow(model_settings))
 ```
@@ -403,7 +340,7 @@ for(i in ind){
 effect_ests
 ```
 
-```{r}
+```{r diagnostics}
 # Look at key diagnostic values for each drug's treatment effect
 # n_eff = effective sample size (near 1000)
 # Rhat = convergence diagnostic (close to 1)
@@ -417,14 +354,14 @@ rownames(diagnostics) = trts
 print(diagnostics)
 ```
 
-```{r}
+```{r traceplots}
 # Plot the traceplot
 traceplot(out, pars = "trt_effect", inc_warmup = FALSE)
 ```
 
 ## Plot half-life
 
-```{r}
+```{r half_lives}
 
 load(ff[main_mod])
 
@@ -448,16 +385,14 @@ Half_life$ID <- factor(Half_life$ID, levels = Half_life$ID)
 Half_life
 ```
 
-```{r}
+```{r summary_t_half}
 Half_life %>%
   group_by(fluType, Trt) %>%
   summarise(med = median(t_12_med) %>% round(1),
             q1 = quantile(t_12_med,0.25) %>% round(1),
             q3 = quantile(t_12_med, 0.75) %>% round(1),
             lab = paste0(Trt[1], " ", med, " h [IQR: ", q1, " to ", q3, " h]")) 
-```
 
-```{r}
 Half_life %>%
   group_by(Trt) %>%
   summarise(med = median(t_12_med) %>% round(1),
@@ -466,53 +401,31 @@ Half_life %>%
             lab = paste0(Trt[1], " ", med, " h [IQR: ", q1, " to ", q3, " h]")) 
 ```
 
-```{r}
+
+```{r plot_t_half}
 G_hl <- plot_hl(Half_life, trt_colors, trt_order)
 G_hl
 ```
 
-```{r}
+```{r plot_t_half_flu_type}
 G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors, trt_order)
 G_hl_flutype
 ```
 
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_hl_flutype.png"))
 
-png(plot_name, width = 8, height = 8, units = "in", res = 600)
-G_hl_flutype
-dev.off()
-```
 
 ## Plot treatment effects
 
-```{r}
+```{r t12_trt}
 G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = "#1640D6", trt_order)
 G2
 ```
 
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_t12_trt.png"))
 
-png(plot_name, width = 15, height = 8, units = "in", res = 350)
-plot_grid(G_hl, G2, ncol = 2, align = "hv")
-dev.off()
-```
 
-```{r}
-# G3 <- plot_trt_effs_2(effect_ests = effect_ests, model_cols = model_cols, -50, 40)
-# G3
-```
 
-```{r}
-# plot_name_pos <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_", ref_arm, ".png"))
 
-# png(plot_name_pos, width = 8, height = 4, units = "in", res = 600)
-# G3
-# dev.off()
-```
-
-```{r}
+```{r esimated_effect_vs_positive_arm}
 if(ref_arm != "No Study Drug"){
   plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png"))
 
