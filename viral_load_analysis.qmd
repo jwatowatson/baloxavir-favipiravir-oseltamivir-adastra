@@ -147,7 +147,6 @@ base_vl_plot <-  plot_vl_base(adastra_dat, fluType = T)
 base_vl_plot
 ```
 
-
 ### For all analyses
 
 ```{r analysis_data}
@@ -190,8 +189,6 @@ tab.ff
 # save_kable(tab.ff,file = 'Baseline_characteristics.png')
 ```
 
-
-
 ```{r make_baseline_data}
 Baseline_data %>%
   group_by(Trt) %>%
@@ -219,7 +216,6 @@ G_baseline_vl <- plot_baseline_vl(Baseline_data)
 G_baseline_vl
 ```
 
-
 ## Viral load dynamics
 
 ```{r, warning=F}
@@ -227,13 +223,10 @@ box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T, trt
 box_vl_flutype
 ```
 
-
 ```{r box_vl, warning=F}
 box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F, trt_order)
 box_vl
 ```
-
-
 
 ## *Fit models*
 
@@ -263,6 +256,11 @@ for(i in 1:length(trt_formulas)){
                      slope_covs_full = covs_full,
                      trt_frmla = formula(trt_formulas[i]),
                      Dmax = Dmax)
+    if(grepl("fluType", trt_formulas[i])){
+        to_delete <-   stan_inputs[[i]]$Treatment_matrix %>% colnames()
+        flag <- grepl("fluType", to_delete) & (! grepl("Trt", to_delete))
+        stan_inputs[[i]]$Treatment_matrix <- stan_inputs[[i]]$Treatment_matrix[,to_delete[!flag]]
+    }
 }
 ```
 
@@ -294,8 +292,8 @@ save(model_settings,
      file = model_setup_f_name)
 ```
 
-
 run the stan models
+
 ```{r run_stan}
 tic()  # Start timing
 if(RUN_MODELS){
@@ -401,7 +399,6 @@ Half_life %>%
             lab = paste0(Trt[1], " ", med, " h [IQR: ", q1, " to ", q3, " h]")) 
 ```
 
-
 ```{r plot_t_half}
 G_hl <- plot_hl(Half_life, trt_colors, trt_order)
 G_hl
@@ -412,18 +409,12 @@ G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors, trt_order)
 G_hl_flutype
 ```
 
-
-
 ## Plot treatment effects
 
 ```{r t12_trt}
 G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = "#1640D6", trt_order)
 G2
 ```
-
-
-
-
 
 ```{r esimated_effect_vs_positive_arm}
 if(ref_arm != "No Study Drug"){
