@@ -132,6 +132,11 @@ adastra_dat = adastra_dat %>% group_by(ID, Timepoint_ID) %>%
          daily_CT = mean(CT)) %>% 
   ungroup() %>%
   mutate(Site = as.factor(Site),
+         Site = relevel(Site, ref = "th001"), # Make Thailand site the reference
+         Sex = factor(Sex,
+                 levels = c(1, 2),
+                 labels = c("Male", "Female")),
+         Sex = relevel(Sex, ref = "Female"),
          Trt = factor(Trt, levels=c(ref_arm, trts)),
          trt_color = 
            as.character(plyr::mapvalues(Trt,
@@ -241,7 +246,8 @@ writeLines(sprintf('Analysis dataset contains %s patients and %s datapoints (%s 
                    sum(adastra_dat_analysis$CT<40),
                    round(100*mean(adastra_dat_analysis$CT<40))))
 
-covs_base = c('symptomDay','fluType', 'Study_time', 'Age_scaled', 'vaccine')
+# Vaccine, Symptom Day, Study_time, Site, Sex, FluA-B, Age
+covs_base = c('symptomDay','fluType', 'Study_time', 'Age_scaled', 'vaccine', 'Site', 'Sex')
 covs_full=c(covs_base)
 
 stan_inputs <- list()
