@@ -1,5 +1,6 @@
 library(dplyr)
 library(ggplot2)
+library(here)
 
 main_mod <- 1
 load(ff[main_mod])  # loads `out`, `stan_inputs`, etc.
@@ -33,6 +34,15 @@ int_summary <- int_summary |>
 slope_summary <- slope_summary |> mutate(across(c(Low, Med, Up), ~ formatter(exp(.))))
 int_summary  # <- int_summary   |> mutate(across(c(Low, Med, Up), ~ formatter(10^(.))))
 
+int_summary_vl <- int_summary %>%
+  mutate(
+    Low_vl = 10^Low,
+    Med_vl = 10^Med,
+    Up_vl  = 10^Up
+  )
+
+int_summary_vl
+
 # Bind summaries
 coefs_summary <- bind_rows(slope_summary, int_summary) |>
   mutate(cov = factor(cov))
@@ -44,10 +54,11 @@ label_map <- c(
   symptomDay = "Symptom day (+1)",
   Study_time = "Study time (study-centered)",
   fluTypeB   = "Influenza B (vs A)",
-  Sex = "Sex (male vs female)",
-  Sitela008 = "Site: Laos (vs Brazil)",
-  Sitenp003 = "Site: Nepal (vs Brazil)",
-  Siteth001 = "Site: Thailand (vs Brazil)"
+  SexMale = "Sex (male vs female)",
+  Sitenp003 = "Site: Nepal (vs Thailand)",
+  Sitela008 = "Site: Laos (vs Thailand)",
+  Sitebr003 = "Site: Brazil (vs Thailand)"#,
+  #Siteth001 = "Site: Thailand (vs Brazil)"
 )
 coefs_summary <- coefs_summary |>
   mutate(cov = forcats::fct_relabel(cov, ~ label_map[.x] %||% .x))
