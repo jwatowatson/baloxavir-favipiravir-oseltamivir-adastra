@@ -8,7 +8,16 @@ library(doParallel)
 
 
 #load(paste0('Rout/model_run_setup_',args[1],'.RData'))
-load(paste0('Rout/model_run_setup_',args[1],  "_mITT_", args[2], '_vs_', args[3], '.RData'))
+
+USE_THRESHOLD = args[4]
+
+if (USE_THRESHOLD) {
+  # If using mITT
+  load(paste0('Rout/model_run_setup_',args[1],  "_mITT_", args[2], '_vs_', args[3], '.RData'))
+} else {
+  # If using ITT
+  load(paste0('Rout/model_run_setup_',args[1],  '_vs_', args[3], '.RData'))
+}
 
 writeLines(sprintf('Doing analysis for %s comparing against %s......', args[1], args[3]))
 
@@ -53,8 +62,11 @@ for(i in 1:nrow(model_settings)){
                  pars=c('L_Omega','theta_rand','g_controls','tau_controls','g_unk','tau_unk'), # we don't save this as it takes up lots of memory!
                  include=FALSE)
   
-  
-  save(out, file = paste0('Rout/model_fits_',i,'_',args[1],  "_mITT_", args[2], '_vs_', args[3], '.RData'))# save output
+  if (USE_THRESHOLD) {
+    save(out, file = paste0('Rout/model_fits_',i,'_',args[1],  "_mITT_", args[2], '_vs_', args[3], '.RData'))# save output
+  } else {
+    save(out, file = paste0('Rout/model_fits_',i,'_',args[1], '_vs_', args[3], '.RData'))# save output
+  }
   
   writeLines('Finished job')
 }
