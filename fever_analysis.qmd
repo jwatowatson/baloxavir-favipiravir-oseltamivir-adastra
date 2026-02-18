@@ -27,11 +27,13 @@ source("functions.R")
 ## Setup the analysis
 
 ```{r}
-intervention = 'interim_firstResults'; 
+intervention = 'Final'; 
 ref_arm = 'No Study Drug'
 
 threshold <- 37
 window_clear <- 1
+
+mITT_threshold <- 250
 ```
 
 ## Import data
@@ -39,17 +41,38 @@ window_clear <- 1
 ```{r}
 adastra_dat = read.csv(here('Analysis_Data', paste0(intervention,'_analysis.csv')))
 adastra_dat <- adastra_dat %>% filter(Timepoint_ID==0) %>% group_by(ID) %>%
-  mutate(Baseline_VL = mean(log10_viral_load)) %>%
+  mutate(Baseline_VL = mean(log10_viral_load),
+         mITT = Baseline_VL > log10(mITT_threshold)) %>%
   distinct(ID, .keep_all = T)
 
 temp_dat <- read.csv(paste0('Analysis_Data/', intervention,'_fever_analysis.csv'))
 temp_dat = temp_dat %>% filter(visit != 'D0H1', Time<=7)
-temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt",'Baseline_VL')],
+temp_dat <- merge(temp_dat, adastra_dat[,c("ID", "Trt",'Baseline_VL','mITT')],
                   by.x = "Label", by.y = "ID") 
 IDs <- unique(temp_dat$Label)
 
 trts = unique(adastra_dat$Trt)
 trts = trts[trts!=ref_arm]
+```
+
+```{r}
+# For Baseline characteristic table
+temp_dat %>% filter(mITT) %>%
+  distinct(Label, .keep_all = TRUE) %>%
+  count(Trt, Fever_Baseline) %>%
+  group_by(Trt) %>%
+  mutate(
+    pct = 100 * n / sum(n)
+  )
+```
+
+```{r}
+temp_dat %>% filter(mITT) %>%
+  distinct(Label, .keep_all = TRUE) %>%
+  count(Fever_Baseline) %>%
+  mutate(
+    pct = 100 * n / sum(n)
+  )
 ```
 
 ```{r}
@@ -104,12 +127,50 @@ p_val
 ```
 
 ```{r}
+# Compute Hazard Ratio
+summary_temp_values <- summary_temp_values %>%
+  mutate(Trt = relevel(factor(Trt, levels = trt_order), ref = ref_arm))
+
+cox_fit <- coxph(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_temp_values)
+
+hr_tab <- summary(cox_fit)$conf.int
+hr_tab <- as.data.frame(hr_tab) %>%
+  tibble::rownames_to_column("term") %>%
+  transmute(
+    arm = gsub("^Trt", "", term),
+    HR = `exp(coef)`,
+    L95 = `lower .95`,
+    U95 = `upper .95`
+  )
+
+hr_tab
+```
+
+```{r}
 rmean_table <- summary(fit)$table %>% as.data.frame()
 rmean_table$strata <- row.names(rmean_table)
 rmean_table %>%
   mutate(ci95_up = rmean + 1.96*`se(rmean)`,
          ci95_low = rmean - 1.96*`se(rmean)`,
-         lab = paste0(round(rmean,1), " days [95%CI: ", round(ci95_low,1), " to ", round(ci95_up,1), " days]")) %>% select(strata, lab)
+         lab = paste0(round(rmean,2), " days [95%CI: ", round(ci95_low,2), " to ", round(ci95_up,2), " days]")) %>% select(strata, lab)
+```
+
+```{r}
+# Compute absolute mean difference between treatment (in hours)
+# Extract reference mean
+ref_mean <- rmean_table %>%
+  filter(strata == paste0("Trt=", ref_arm)) %>%
+  pull(rmean)
+
+# Compute mean reduction
+mean_diff_table <- rmean_table %>%
+  filter(strata != paste0("Trt=", ref_arm)) %>%
+  mutate(
+    mean_reduction_days = ref_mean - rmean,
+    mean_reduction_hours = mean_reduction_days * 24
+  )
+
+mean_diff_table %>% select(strata, mean_reduction_days, mean_reduction_hours)
 ```
 
 ## Kaplan-Meier plot
@@ -123,7 +184,7 @@ cols <- as.character(cols)
 ```
 
 ```{r fever_clearance}
-survplot <- survminer::ggsurvplot(fit,pval=F,
+survplot_fever <- survminer::ggsurvplot(fit,pval=F,
                                   risk.table = T,
                                   risk.table.y.text=F,
                                   palette = cols,
@@ -135,9 +196,9 @@ survplot <- survminer::ggsurvplot(fit,pval=F,
                                   size = 1.5,
                                   alpha = 0.7,
                                   xlim = c(0,7)) 
-lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.1f", p_val)
+lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.2f", p_val)
 
-survplot$plot <- survplot$plot + 
+survplot_fever$plot <- survplot_fever$plot + 
   geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
   geom_hline(yintercept = 0.5, linetype = "dashed", col = "red", size = 0.6) +
   xlab("Time since randomisation (days)") +
@@ -154,18 +215,18 @@ survplot$plot <- survplot$plot +
 ```{r}
 xlabel <- "Time since randomisation (days)"
 
-survplot$table <- survplot$table +
+survplot_fever$table <- survplot_fever$table +
                     xlab(xlabel) +
                     theme(axis.title.x = element_text(face = "bold"),
                          plot.title = element_text(size = 14))
-survplot
+survplot_fever
 ```
 
 ```{r}
 fname <- paste0(here("Plots", intervention, "Temp_surv_plot.pdf"))
 
 pdf(fname, width = 6, height = 6)
-print(survplot, newpage = F)
+print(survplot_fever, newpage = F)
 dev.off()
 ```
 
@@ -203,18 +264,17 @@ pw_logrank_pval
 
 ```{r}
 library(gridExtra)
-survplot_fever <- survplot
 
 grob1 <- arrangeGrob(survplot_fever$plot, survplot_fever$table, ncol = 1, heights = c(2, 1))
 ```
 
 ```{r}
 # From symptom clearance
-grob2 <- arrangeGrob(survplot$plot, survplot$table, ncol = 1, heights = c(2, 1))
+grob2 <- arrangeGrob(survplot_sympt$plot, survplot_sympt$table, ncol = 1, heights = c(2, 1))
 ```
 
 ```{r}
-fname <- paste0(here("Plots", intervention, "fever_symptom_surv_plot_7days.png"))
+fname <- paste0(here("Plots", intervention, "fever_symptom_surv_plot_28days.png"))
 
 png(fname, width = 13, height = 7, unit = 'in', res = 350)
 print(ggarrange(grob1, grob2, ncol = 2, nrow = 1))
