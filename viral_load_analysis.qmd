@@ -71,7 +71,7 @@ if (ref_arm == 'No Study Drug') {
 }
 
 mITT_threshold <- 250
-use_threshold = T
+use_threshold = F
 ```
 
 ```{r define_population}
@@ -462,7 +462,7 @@ covs_full=c(covs_base)
 
 stan_inputs <- list()
 
-trt_formulas <- c("~ Trt", "~ Trt*fluType")
+trt_formulas <- c("~ Trt")#, "~ Trt*fluType")
 for(i in 1:length(trt_formulas)){
   stan_inputs[[i]] = 
     make_stan_inputs(input_data_fit = adastra_dat_analysis,
@@ -534,7 +534,7 @@ cat("\n", sprintf("Total time is %.2f seconds\n", elapsed), sep = "")
 if (use_threshold) {
   ff = list.files('Rout/', pattern = paste0(intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
 } else {
-  ff = list.files('Rout/', pattern = paste0(intervention, "_mITT", '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+  ff = list.files('Rout/', pattern = paste0(intervention, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
 }
 ff = ff[grep(pattern = 'model_fits_',x = ff)]
 #if(!length(ff)==nrow(model_settings)) stop('not all outputs are ready for all model settings')
@@ -618,7 +618,7 @@ Half_life_dat <- Half_life_dat %>%
 
 write.csv(
   Half_life_dat,
-  "D:/baloxavir-favipiravir-oseltamivir-adastra/Analysis_Data/Half_life_dat.csv",
+  "D:/baloxavir-favipiravir-oseltamivir-adastra/Analysis_Data/Half_life_dat_ITT.csv",
   row.names = FALSE
 )
 ```
