@@ -20,6 +20,7 @@ library(survminer)
 library(lubridate)
 library(stringr)
 library(here)
+library(tidyr)
 
 source("functions.R")
 ```
@@ -27,7 +28,7 @@ source("functions.R")
 ## Setup the analysis
 
 ```{r}
-intervention = 'interim_firstResults'; 
+intervention = 'Final'; 
 ref_arm = 'No Study Drug'
 
 window_clear <- 1
@@ -52,8 +53,8 @@ sympt_dat <- read.csv(here("Analysis_Data", paste0(intervention, "_symptom_analy
 
 sympt_dat <- merge(sympt_dat, adastra_dat[,c("ID","Trt", "Rand_date", "mITT")], by.x = "Label", by.y = "ID", all.y = T)
 
-
-sympt_dat <- sympt_dat %>% filter(mITT, Timepoint_ID <=7)
+#sympt_dat <- sympt_dat %>% filter(mITT, Timepoint_ID <=7)
+sympt_dat <- sympt_dat %>% filter(mITT)
 
 IDs <- unique(sympt_dat$Label)
 
@@ -62,13 +63,88 @@ trts = trts[trts!=ref_arm]
 ```
 
 ```{r}
-yn_ind <- grep("yn", colnames(sympt_dat))
-temp <- sympt_dat[,yn_ind[-c(1, length(yn_ind))]]
-temp[is.na(temp)] <-0 
+symptom_cols <- c(
+  "sq_fevyn",
+  "sq_headyn","sq_dizzyn","sq_fatigyn","sq_coughyn","sq_difbreayn",
+  "sq_chpainyn","sq_runnoseyn","sq_abdpainyn","sq_losappetyn",
+  "sq_nausyn","sq_vomyn","sq_diaryn","sq_arthyn","sq_myalyn",
+  "sq_itchyn","sq_skrashyn","sq_sore"
+)
+
+sympt_long <- sympt_dat %>%
+  filter(Timepoint_ID == 0) %>%
+  mutate(Trt = factor(Trt, levels = trt_order)) %>%
+  select(Trt, all_of(symptom_cols)) %>%
+  pivot_longer(
+    cols = all_of(symptom_cols),
+    names_to = "symptom",
+    values_to = "val"
+  ) %>%
+  mutate(val = tidyr::replace_na(val, 0))
+
+# Arm-specific summary
+arm_summary <- sympt_long %>%
+  group_by(symptom, Trt) %>%
+  summarise(
+    denom = n(),
+    n1    = sum(val == 1),
+    pct1  = 100 * n1 / denom,
+    .groups = "drop"
+  )
+
+# Overall summary
+overall_summary <- sympt_long %>%
+  group_by(symptom) %>%
+  summarise(
+    denom = n(),
+    n1    = sum(val == 1),
+    pct1  = 100 * n1 / denom,
+    .groups = "drop"
+  ) %>%
+  mutate(Trt = "Overall")
+
+# Combine
+sympt_baseline_tab <- bind_rows(arm_summary, overall_summary) %>%
+  mutate(cell = sprintf("%d (%.1f%%)", n1, pct1)) %>%
+  select(symptom, Trt, cell) %>%
+  pivot_wider(names_from = Trt, values_from = cell) %>%
+  mutate(symptom = factor(symptom, levels = symptom_cols)) %>%
+  arrange(symptom)
+
+sympt_baseline_tab
+```
+
+```{r}
+# Previously grep "yn" but sore does not have that substring
+# also we exclude skin rash
+symptom_cols <- c(
+  "sq_fevyn",
+  "sq_headyn","sq_dizzyn","sq_fatigyn","sq_coughyn","sq_difbreayn",
+  "sq_chpainyn","sq_runnoseyn","sq_abdpainyn","sq_losappetyn",
+  "sq_nausyn","sq_vomyn","sq_diaryn","sq_arthyn","sq_myalyn",
+  "sq_itchyn","sq_skrashyn","sq_sore"
+)
+
+temp <- sympt_dat %>%
+  select(all_of(symptom_cols))
+
+temp[is.na(temp)] <- 0
 
 sympt_dat$sq_yn <- rowSums(temp)
 sympt_dat$sq_yn[sympt_dat$sq_yn > 0] <- 1
+
+# Exclude cough + running nose
+cough_running_nose <- c("sq_coughyn", "sq_runnoseyn")
+temp2 <- temp %>% select(-all_of(cough_running_nose))
+
+# Row sum indicator
+sympt_dat$sq_yn_notcough_runningnose <- rowSums(temp2)
+sympt_dat$sq_yn_notcough_runningnose[
+  sympt_dat$sq_yn_notcough_runningnose > 0
+] <- 1
 ```
+
+## For all symptoms
 
 ```{r}
 sympt_dat_for_plot <- sympt_dat
@@ -162,7 +238,9 @@ cols <- as.character(cols)
 ```
 
 ```{r}
-survplot <- survminer::ggsurvplot(fit,pval=F,
+visit_days <- c(0:7, 14, 28)
+
+survplot_sympt <- survminer::ggsurvplot(fit,pval=F,
                                   risk.table = T,
                                   risk.table.y.text=F,
                                   palette = cols,
@@ -173,10 +251,13 @@ survplot <- survminer::ggsurvplot(fit,pval=F,
                                 #  pval.coord = c(0,0.1),
                                   size = 1.5,
                                   alpha = 0.7,
-                                  xlim = c(0,7)) 
-lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.1f", p_val)
+                                  xlim = c(0,28),
+                                risk.table.fontsize = 2,
+                                risk.table.breaks = visit_days) 
+lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.2f", p_val)
 
-survplot$plot <- survplot$plot + 
+survplot_sympt$plot <- survplot_sympt$plot + 
+  scale_x_continuous(breaks = visit_days) +
   geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
   geom_hline(yintercept = 0.5, linetype = "dashed", col = "red", size = 0.6) +
   xlab("Time since randomisation (days)") +
@@ -187,24 +268,34 @@ survplot$plot <- survplot$plot +
         title = element_blank()
   ) +
   ggtitle("B) Symptom resolution") +
-  annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,1)), vjust=0, hjust = 0)
+  annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,2)), vjust=0, hjust = 0)
 ```
 
 ```{r}
+# Risk table
 xlabel <- "Time since randomisation (days)"
 
-survplot$table <- survplot$table +
-                    xlab(xlabel) +
-                    theme(axis.title.x = element_text(face = "bold"),
+survplot_sympt$table <- survplot_sympt$table + 
+  scale_x_continuous(breaks = visit_days, limits = c(0, 28)) +
+                    xlab(xlabel) + theme(axis.title.x = element_text(face = "bold"),
                          plot.title = element_text(size = 14))
-survplot
+survplot_sympt
 ```
 
 ```{r}
-fname <- paste0(here("Plots", intervention, "symptom_surv_plot_7days.pdf"))
+fname <- paste0(here("Plots", intervention, "symptom_surv_plot_28days.pdf"))
 
-pdf(fname, width = 6, height = 6)
-print(survplot, newpage=F)
+pdf(fname, width = 6, height = 8)
+print(survplot_sympt, newpage=F)
+dev.off()
+```
+
+```{r}
+fname <- here("Plots", intervention,
+              "symptom_surv_plot_28days.png")
+
+png(fname, width = 6, height = 6, units = "in", res = 600)
+print(survplot_sympt, newpage = FALSE)
 dev.off()
 ```
 
@@ -236,4 +327,169 @@ for(i in 1:length(trts)){
 
 pw_logrank_pval
 
+```
+
+## For non cough, running nose
+
+```{r}
+sympt_dat_for_plot <- sympt_dat
+
+# Remove missing
+sympt_dat_for_plot <- sympt_dat_for_plot[
+  !is.na(sympt_dat_for_plot$sq_yn_notcough_runningnose), ]
+
+# Convert to logical
+sympt_dat_for_plot$sq_yn_notcough_runningnose <-
+  as.logical(sympt_dat_for_plot$sq_yn_notcough_runningnose)
+
+# Initialize survival variables
+sympt_dat_for_plot$clearance_time <- NA
+sympt_dat_for_plot$clearance_time_cens <- 1
+
+sympt_dat_for_plot$Label2 <- as.numeric(as.factor(sympt_dat_for_plot$Label))
+
+never_list <- NULL
+
+for(id in 1:length(unique(sympt_dat_for_plot$Label2))){
+
+  ind <- sympt_dat_for_plot$Label2 == id
+  symptom_vec <- sympt_dat_for_plot$sq_yn_notcough_runningnose[ind]
+
+  if(all(!symptom_vec)){  # never symptomatic
+    sympt_dat_for_plot$clearance_time[ind] <- 0
+    never_list <- c(never_list, id)
+
+  } else if(all(symptom_vec)){  # always symptomatic
+    sympt_dat_for_plot$clearance_time[ind] <-
+      max(sympt_dat_for_plot$Timepoint_ID[ind])
+    sympt_dat_for_plot$clearance_time_cens[ind] <- 0  # censored
+
+  } else {  # symptoms cleared
+
+    j_cleared <- which(ind & !sympt_dat_for_plot$sq_yn_notcough_runningnose)
+
+    check_ahead <- FALSE
+
+    for(j in j_cleared){
+      if(!check_ahead){
+
+        ind_check <- which(
+          ind &
+          sympt_dat_for_plot$Timepoint_ID >
+            sympt_dat_for_plot$Timepoint_ID[j] &
+          sympt_dat_for_plot$Timepoint_ID <=
+            sympt_dat_for_plot$Timepoint_ID[j+1]
+        )
+
+        if(length(ind_check) > 0 &&
+           all(!sympt_dat_for_plot$sq_yn_notcough_runningnose[ind_check])){
+
+          sympt_dat_for_plot$clearance_time[ind] <-
+            sympt_dat_for_plot$Timepoint_ID[j]
+
+          check_ahead <- TRUE
+        }
+      }
+    }
+
+    if(!check_ahead){
+      sympt_dat_for_plot$clearance_time[ind] <-
+        tail(sympt_dat_for_plot$Timepoint_ID[ind], 1)
+
+      sympt_dat_for_plot$clearance_time_cens[ind] <- 0
+    }
+  }
+}
+```
+
+```{r}
+sympt_dat_for_plot$Trt <- factor(
+  sympt_dat_for_plot$Trt,
+  levels = c(ref_arm, trts)
+)
+
+sympt_dat_for_plot2 <- sympt_dat_for_plot %>%
+  group_by(Label) %>%
+  filter(Timepoint_ID == 0) %>%
+  ungroup() %>%
+  mutate(Trt = factor(Trt, levels = trt_order))
+
+fit2 <- survfit(
+  Surv(clearance_time, clearance_time_cens) ~ Trt,
+  data = sympt_dat_for_plot2
+)
+
+diff2 <- survdiff(
+  Surv(clearance_time, clearance_time_cens) ~ Trt,
+  data = sympt_dat_for_plot2
+)
+
+p_val2 <- pchisq(diff2$chisq, length(diff2$n) - 1, lower.tail = FALSE)
+
+p_val2
+```
+
+```{r}
+rmean_table2 <- summary(fit2)$table %>% as.data.frame()
+rmean_table2$strata <- row.names(rmean_table2)
+rmean_table2 %>%
+  mutate(ci95_up = rmean + 1.96*`se(rmean)`,
+         ci95_low = rmean - 1.96*`se(rmean)`,
+         lab = paste0(round(rmean,1), " days [", round(ci95_low,1), " to ", round(ci95_up,1), " days]")) %>% select(strata, lab)
+```
+
+```{r}
+survplot_sympt2 <- survminer::ggsurvplot(fit2,pval=F,
+                                  risk.table = T,
+                                  risk.table.y.text=F,
+                                  palette = cols,
+                                  ggtheme = theme_bw(base_size = 16),
+                                  legend.labs = trt_order,
+                                  break.time.by = 1,
+                                 # pval.size = 4,
+                                #  pval.coord = c(0,0.1),
+                                  size = 1.5,
+                                  alpha = 0.7,
+                                  xlim = c(0,7)) 
+lab2 <- if (p_val2 < 1e-3) sprintf("p-value = %.0e", p_val2) else sprintf("p-value = %.2f", p_val2)
+
+survplot_sympt2$plot <- survplot_sympt2$plot + 
+  geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", col = "red", size = 0.6) +
+  xlab("Time since randomisation (days)") +
+  ylab("Proportion of patients with symptoms") +
+ theme(
+        axis.title=element_text(face="bold",),
+        strip.text = element_text(face = "bold"),
+        title = element_blank()
+  ) +
+  ggtitle("B) Symptom resolution") +
+  annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val2,2)), vjust=0, hjust = 0)
+```
+
+```{r}
+xlabel <- "Time since randomisation (days)"
+
+survplot_sympt2$table <- survplot_sympt2$table +
+                    xlab(xlabel) +
+                    theme(axis.title.x = element_text(face = "bold"),
+                         plot.title = element_text(size = 14))
+survplot_sympt2
+```
+
+```{r}
+fname <- paste0(here("Plots", intervention, "symptom_surv_plot_nocough_runningnose_7days.pdf"))
+
+pdf(fname, width = 6, height = 6)
+print(survplot_sympt2, newpage=F)
+dev.off()
+```
+
+```{r}
+fname <- here("Plots", intervention,
+              "symptom_surv_plot_nocough_runningnose_7days.png")
+
+png(fname, width = 6, height = 6, units = "in", res = 600)
+print(survplot_sympt2, newpage = FALSE)
+dev.off()
 ```
