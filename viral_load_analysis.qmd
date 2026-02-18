@@ -29,8 +29,9 @@ library(scales)
 library(cowplot)
 library(grid)
 library(webshot2)
-# library(here)
+library(here)
 library(tictoc)
+library(lme4)
 
 conflicts_prefer(dplyr::filter)
 
@@ -117,9 +118,44 @@ timeline <- plot_randomisation(adastra_dat %>% distinct(ID, Rand_date, Trt, fluT
 timeline
 ```
 
+```{r}
+plot_name <- here("Plots", intervention, paste0("timeline.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(timeline)
+dev.off()
+```
+
 ```{r mITT_plot}
 mITT_plot <- plot_mITT(adastra_dat)
 mITT_plot
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_per_symptomOnset.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(mITT_plot)
+dev.off()
+```
+
+```{r}
+mITT_count <- adastra_dat %>%
+  mutate(
+    symptomOnset = ceiling(symptomDay)
+  ) %>%
+  group_by(Trt, symptomOnset, mITT) %>%
+  summarise(
+    n_ID = n_distinct(ID),
+    .groups = "drop"
+  ) %>%
+  tidyr::pivot_wider(
+    names_from = mITT,
+    values_from = n_ID,
+    names_glue = "{mITT}",
+    values_fill = 0
+  ) %>%
+  arrange(Trt, symptomOnset)
+
+mITT_count
 ```
 
 ## *Baseline characteristics*
@@ -136,7 +172,7 @@ adastra_dat = adastra_dat %>% group_by(ID, Timepoint_ID) %>%
          Sex = factor(Sex,
                  levels = c(1, 2),
                  labels = c("Male", "Female")),
-         Sex = relevel(Sex, ref = "Female"),
+         Sex = relevel(Sex, ref = "Female"), # Make female the reference
          Trt = factor(Trt, levels=c(ref_arm, trts)),
          trt_color = 
            as.character(plyr::mapvalues(Trt,
@@ -214,11 +250,171 @@ Baseline_data %>%
             )
 ```
 
+```{r}
+Baseline_data %>%
+  summarise(age_q1 = quantile(Age,0.25),
+            age_q2 = quantile(Age,0.5),
+            age_q3 = quantile(Age,0.75),
+            mean_age = mean(Age),
+            sd_age = sd(Age),
+            
+            onset_q1 = quantile(symptomDay,0.25),
+            onset_q2 = quantile(symptomDay,0.5),
+            onset_q3 = quantile(symptomDay,0.75),
+            mean_onset = mean(symptomDay) %>% round(digits = 1),
+            sd_onset = sd(symptomDay) %>% round(digits = 1),
+            median_onset = median(symptomDay) %>% round(digits = 2),
+            iqr_onset = IQR(symptomDay) %>% round(digits = 2)
+            
+            )
+```
+
 ## Plot Baseline viral loads
 
 ```{r baseline_VL}
 G_baseline_vl <- plot_baseline_vl(Baseline_data)
 G_baseline_vl
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("baseline_vl_fluType.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(G_baseline_vl)
+dev.off()
+```
+
+```{r}
+# Baseline viral load statistics, stratified by flu type
+Baseline_data %>%
+  group_by(fluType) %>%
+  summarise(
+    n = sum(!is.na(Baseline.viral.load)),
+    
+    mean_vl   = round(mean(Baseline.viral.load, na.rm = TRUE), 2),
+    sd_vl     = round(sd(Baseline.viral.load, na.rm = TRUE), 2),
+    
+    q1_vl     = round(quantile(Baseline.viral.load, 0.25, na.rm = TRUE), 2),
+    median_vl = round(quantile(Baseline.viral.load, 0.5,  na.rm = TRUE), 2),
+    q3_vl     = round(quantile(Baseline.viral.load, 0.75, na.rm = TRUE), 2),
+    
+    iqr_vl    = round(IQR(Baseline.viral.load, na.rm = TRUE), 2),
+    
+    .groups = "drop"
+  )
+```
+
+## Left-Right Swab Difference
+
+```{r}
+# Investigate left-right diff
+
+# Some Location names are wrong need fix
+adastra_dat_swab_analysis <- adastra_dat_analysis %>%
+  mutate(
+    Location = str_trim(Location),
+    # Fix TSL into TLS
+    Location = str_replace(Location, "^TSL", "TLS"),
+    # Remove hyphen variants (TSL-1 into TLS1, RTS-1 into RTS1)
+    Location = str_replace(Location, "-", ""),
+    # Remove stray "-" rows
+    Location = ifelse(Location == "", NA, Location)
+  )
+
+adastra_dat_swab_analysis <- adastra_dat_swab_analysis %>%
+  mutate(
+    replicate = case_when(
+      Location %in% c("TLS1", "RTS1") ~ 1,
+      Location %in% c("TLS2", "RTS2") ~ 2,
+      Location %in% c("TLS",  "RTS")  ~ 1,  # follow-up only one swab pair
+      TRUE ~ NA_real_
+    ),
+    swab_side = case_when(
+      grepl("^TLS", Location) ~ "TLS",
+      grepl("^RTS", Location) ~ "RTS",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+```{r}
+# Only take swabs that have been labeled
+adastra_dat_pairs <- adastra_dat_swab_analysis %>%
+  filter(swab_side %in% c("TLS", "RTS")) %>%
+  select(ID, Timepoint_ID, replicate, swab_side, log10_viral_load)
+
+# Want only exactly one TLS and RTS in each ID, Timepoint_ID, replicate
+adastra_dat_pairs <- adastra_dat_pairs %>%
+  group_by(ID, Timepoint_ID, replicate) %>%
+  filter(n_distinct(swab_side) == 2, sum(swab_side == "TLS") == 1, sum(swab_side == "RTS") == 1) %>%
+  ungroup()
+
+adastra_dat_diff <- adastra_dat_pairs %>%
+  pivot_wider(names_from = swab_side, values_from = log10_viral_load) %>% mutate(diff_TLS_minus_RTS = TLS - RTS, 
+          abs_diff = abs(diff_TLS_minus_RTS),
+          mean_vl = (TLS + RTS) / 2)
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_per_symptomOnset.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(mITT_plot)
+dev.off()
+```
+
+```{r}
+box_lr_swab <- plot_swab_lr_boxplot(adastra_dat_pairs)
+box_lr_swab
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("box_lr_swab.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(box_lr_swab)
+dev.off()
+```
+
+```{r}
+ggplot(adastra_dat_diff, aes(x = diff_TLS_minus_RTS)) +
+  geom_histogram(bins = 30, color = "black", fill = "skyblue") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  theme_bw(base_size = 14) +
+  labs(
+    x = "Right - Left (log10 viral load)",
+    y = "Count",
+    title = "Distribution of paired swab differences"
+  )
+```
+
+```{r}
+adastra_dat_pairs$swab_side <- factor(adastra_dat_pairs$swab_side, , levels = c("TLS", "RTS"))
+
+fit_side <- lmer(
+  log10_viral_load ~ swab_side + Timepoint_ID + (1 | ID), 
+  data = adastra_dat_pairs
+)
+
+summary(fit_side)
+```
+
+```{r}
+adastra_dat_pairs <- adastra_dat_pairs %>%
+  group_by(ID, Timepoint_ID, replicate) %>%
+  mutate(
+    swab_hl = if_else(
+      row_number() == order(-log10_viral_load, row_number())[1],
+      "High",
+      "Low"
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(swab_hl = factor(swab_hl, levels = c("Low", "High")))
+
+fit_hl <- lmer(
+  log10_viral_load ~ swab_hl + Timepoint_ID + (1 | ID), 
+  data = adastra_dat_pairs
+)
+
+summary(fit_hl)
 ```
 
 ## Viral load dynamics
@@ -228,9 +424,23 @@ box_vl_flutype <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = T, trt
 box_vl_flutype
 ```
 
+```{r}
+plot_name <- here("Plots", intervention, paste0("box_vl_fluType.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(box_vl_flutype)
+dev.off()
+```
+
 ```{r box_vl, warning=F}
 box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F, trt_order)
 box_vl
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("box_vl.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(box_vl)
+dev.off()
 ```
 
 ## *Fit models*
@@ -289,8 +499,14 @@ writeLines(sprintf('We are running all models with %s chains and %s samples for 
                    unique(model_settings$Nwarmup),
                    unique(model_settings$Nthin), 
                    unique(model_settings$Nchain*(model_settings$Niter-model_settings$Nwarmup)/model_settings$Nthin)))
+```
 
-model_setup_f_name = paste0('Rout/model_run_setup_',intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData')
+```{r}
+if (use_threshold) {
+  model_setup_f_name = paste0('Rout/model_run_setup_',intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData')
+} else {
+  model_setup_f_name = paste0('Rout/model_run_setup_',intervention, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData')
+}
 save(model_settings, 
      adastra_dat_analysis,
      stan_inputs, 
@@ -303,7 +519,7 @@ run the stan models
 ```{r run_stan}
 tic()  # Start timing
 if(RUN_MODELS){
-  system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)))
+  system(paste('Rscript --vanilla run_models_local.R',intervention, mITT_threshold, ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), use_threshold))
 }
 
 timing <- toc(log = TRUE)  # Capture timing info
@@ -315,7 +531,11 @@ cat("\n", sprintf("Total time is %.2f seconds\n", elapsed), sep = "")
 ## Model selection
 
 ```{r}
-ff = list.files('Rout/', pattern = paste0(intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+if (use_threshold) {
+  ff = list.files('Rout/', pattern = paste0(intervention, "_mITT_", mITT_threshold, '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+} else {
+  ff = list.files('Rout/', pattern = paste0(intervention, "_mITT", '_vs_', ifelse(ref_arm == "No Study Drug", "NSD", ref_arm), '.RData'))
+}
 ff = ff[grep(pattern = 'model_fits_',x = ff)]
 #if(!length(ff)==nrow(model_settings)) stop('not all outputs are ready for all model settings')
 ff = paste0('Rout/',ff)
@@ -389,6 +609,20 @@ Half_life$ID <- factor(Half_life$ID, levels = Half_life$ID)
 Half_life
 ```
 
+```{r}
+# save half life data
+Half_life_dat <- Half_life %>% select(-Trt, -ID_stan)
+Half_life_dat <- Half_life_dat %>%
+  mutate(ID = as.character(ID)) %>%
+  arrange(ID)
+
+write.csv(
+  Half_life_dat,
+  "D:/baloxavir-favipiravir-oseltamivir-adastra/Analysis_Data/Half_life_dat.csv",
+  row.names = FALSE
+)
+```
+
 ```{r summary_t_half}
 Half_life %>%
   group_by(fluType, Trt) %>%
@@ -415,11 +649,28 @@ G_hl_flutype <- plot_hl_flutype(Half_life, trt_colors, trt_order)
 G_hl_flutype
 ```
 
+```{r}
+plot_name <- here("Plots", intervention, paste0("hl_fluType.png"))
+png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(G_hl_flutype)
+dev.off()
+```
+
 ## Plot treatment effects
 
 ```{r t12_trt}
 G2 <- plot_trt_effs(effect_ests = effect_ests, model_cols = "#1640D6", trt_order)
 G2
+```
+
+```{r}
+if(ref_arm == "No Study Drug"){
+  plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_nsd.png"))
+
+png(plot_name, width = 12, height = 6, units = "in", res = 600)
+grid.arrange(G_hl, G2, ncol = 2)
+dev.off()
+}
 ```
 
 ```{r esimated_effect_vs_positive_arm}
