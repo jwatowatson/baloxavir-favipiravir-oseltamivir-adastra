@@ -682,6 +682,109 @@ plot_baseline_vl <- function(Baseline_data){
 }
 
 
+plot_swab_lr_boxplot <- function(adastra_dat_pairs){
+  dat <- adastra_dat_pairs %>%
+    mutate(swab_side = factor(swab_side, levels = c("TLS", "RTS")))
+  
+  pairs_wide <- dat %>%
+    pivot_wider(
+      names_from  = swab_side,
+      values_from = log10_viral_load
+    ) %>%
+    filter(!is.na(TLS) & !is.na(RTS)) %>%
+    mutate(
+      high = pmax(TLS, RTS),
+      low  = pmin(TLS, RTS)
+    )
+  
+  # Left vs Right Swab
+  plot_lr <- pairs_wide %>%
+    select(RTS, TLS) %>%
+    pivot_longer(cols = c(RTS, TLS),
+                 names_to = "Swab",
+                 values_to = "log10_vl") %>%
+    mutate(
+      Swab = factor(Swab,
+                    levels = c("TLS", "RTS"),
+                    labels = c("Left swab", "Right swab"))
+    )
+  
+  cols_lr <- c("Right swab" = "#387ADF",
+               "Left swab"  = "#EE4266")
+  
+  G_lr <- ggplot(plot_lr, aes(x = Swab, y = log10_vl, fill = Swab)) +
+    geom_boxplot(width = 0.5, alpha = 0.4, size = 0.8, outlier.alpha = 0.3) +
+    theme_bw(base_size = 16) +
+    scale_fill_manual(values = cols_lr, guide = "none") +
+    xlab("") +
+    ylab("Viral densities\n(copies/mL)") +
+    scale_y_continuous(labels = scales::math_format(10^.x), limits = c(0, 8)) +
+    ggtitle("Left vs Right") +
+    theme(
+      plot.title = element_text(size = 11, face = "bold", hjust = 0.5),
+      axis.title = element_text(face = "bold"),
+      legend.position = "none"
+    )
+  G_lr
+}
+
+
+plot_swab_hl_boxplots <- function(adastra_dat_pairs){
+  dat <- adastra_dat_pairs %>%
+    mutate(swab_side = factor(swab_side, levels = c("TLS", "RTS")))
+  
+  pairs_wide <- dat %>%
+    pivot_wider(
+      names_from  = swab_side,
+      values_from = log10_viral_load
+    ) %>%
+    filter(!is.na(TLS) & !is.na(RTS)) %>%
+    mutate(
+      high = pmax(TLS, RTS),
+      low  = pmin(TLS, RTS)
+    )
+
+  # High VL vs Low VL Swab
+  plot_hl <- pairs_wide %>%
+    select(high, low) %>%
+    pivot_longer(cols = c(high, low),
+                 names_to = "Level",
+                 values_to = "log10_vl") %>%
+    mutate(
+      Level = factor(Level,
+                     levels = c("low", "high"),
+                     labels = c("Low viral load swab", "High viral load swab"))
+    )
+  
+  cols_hl <- c("Low viral load swab"  = "#999999",
+               "High viral load swab" = "#333333")
+  
+  G_hl <- ggplot(plot_hl, aes(x = Level, y = log10_vl, fill = Level)) +
+    geom_boxplot(width = 0.5, alpha = 0.4, size = 0.8, outlier.alpha = 0.3) +
+    theme_bw(base_size = 16) +
+    scale_fill_manual(values = cols_hl, guide = "none") +
+    xlab("") +
+    ylab("Viral densities\n(copies/mL)") +
+    scale_y_continuous(labels = scales::math_format(10^.x), limits = c(0, 8)) +
+    ggtitle("High vs Low") +
+    theme(
+      plot.title = element_text(size = 11, face = "bold", hjust = 0.5),
+      axis.title = element_text(face = "bold"),
+      legend.position = "none"
+    )
+  G_hl
+}
+
+
+plot_swab_pair_boxplots <- function(adastra_dat_pairs){
+  G_lr <- plot_swab_lr_boxplot(adastra_dat_pairs)
+  G_hl <- plot_swab_hl_boxplot(adastra_dat_pairs)
+  
+  ggarrange(G_lr, G_hl, ncol = 2, align = "hv")
+}
+
+
+
 plot_vl_box <- function(dataplot, trt_colors, fluType = F, trt_order = NULL){
   dataplot <- dataplot %>%
     distinct(ID, Timepoint_ID, daily_VL, .keep_all = T) %>%
@@ -941,6 +1044,15 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
   
   effect_ests_plots$model <- as.factor(effect_ests_plots$model)
   
+  effect_ests_plots <- effect_ests_plots %>%
+    dplyr::mutate(
+      eff_lab = paste0(
+        round(med * 100) - 100, "% [",
+        round(L95 * 100) - 100, ", ",
+        round(U95 * 100) - 100, "]"
+      )
+    )
+  
   #Labeling reference arm
   lab_ref <- ref_arm
   #Labeling intervention arm
@@ -956,6 +1068,14 @@ plot_trt_effs <- function(effect_ests, model_cols, trt_order){
     geom_point(position = position_dodge(width = 0.5), size = 6) +
     geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 1.25) +
     geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 3) +
+    geom_text(
+      aes(y = med, label = eff_lab),
+      position = position_dodge(width = 0.5),
+      colour = "black",
+      size = 3.5,
+      vjust = -1.2,
+      show.legend = FALSE
+    ) +
     scale_color_manual(values = model_cols, guide = NULL) +
     coord_flip() +
     theme_bw(base_size = 18) +
