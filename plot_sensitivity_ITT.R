@@ -6,7 +6,7 @@ ref_code <- ifelse(ref_arm == "No Study Drug", "NSD", ref_arm)
 ff = list.files(
   'Rout/',
   pattern = paste0(
-    intervention, "_mITT(_[0-9]+)?_vs_", ref_code,
+    intervention, "(_mITT)?(_[0-9]+)?_vs_", ref_code,
     "\\.RData$"
   )
 )
@@ -50,6 +50,16 @@ for(i in 1:length(effect_ests)){
 effect_ests_plots$model <- factor(effect_ests_plots$model, levels = rev(names(model_cols)),
                                   labels = rev(c("mITT population", "ITT population")))
 
+## Build label: "XX% [XX to XX]" using the same formatter as the y-axis
+effect_ests_plots$lbl <- paste0(
+  round(formatter(effect_ests_plots$med)), "% [",
+  round(formatter(effect_ests_plots$L95)), " to ",
+  round(formatter(effect_ests_plots$U95)), "]"
+)
+
+## Put mITT label above its CI, ITT label below its CI
+effect_ests_plots$lbl_vjust <- ifelse(effect_ests_plots$model == "mITT population", -0.9, 1.8)
+
 #Labeling reference arm
 lab_ref <- ref_arm
 #Labeling intervention arm
@@ -65,6 +75,9 @@ G <- ggplot(effect_ests_plots,
   geom_point(position = position_dodge(width = 0.5), size = 6) +
   geom_errorbar(aes(x = arm, ymin = L95, ymax = U95),position = position_dodge(width = 0.5), width = 0, linewidth = 1.25) +
   geom_errorbar(aes(x = arm, ymin = L80, ymax = U80),position = position_dodge(width = 0.5), width = 0, linewidth = 3) +
+  geom_text(aes(label = lbl, vjust = lbl_vjust), colour = "black",
+            position = position_dodge(width = 0.5),
+            size = 4.2, show.legend = FALSE) +
   scale_color_manual(values = model_cols, name = NULL) +
   coord_flip() +
   theme_bw(base_size = 18) +
@@ -87,11 +100,6 @@ G <- ggplot(effect_ests_plots,
          legend.position = "bottom",
          legend.title = element_text(face = "bold"))
 G
-
-
-png(plot_name, width = 15, height = 8, units = "in", res = 350)
-plot_grid(G_hl, G2, ncol = 2, align = "hv")
-dev.off()
 
 plot_name <- here("Plots", intervention, paste0( "sensitivity_trt_effect.png"))
 png(plot_name, width = 8, height = 6, units = "in", res = 350)
