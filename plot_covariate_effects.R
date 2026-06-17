@@ -91,7 +91,7 @@ G_cov2 <- coefs_summary |> filter(type == "Intercept") |>
   geom_hline(yintercept = 0, linetype = "32", col = "#CF0F0F") +
   coord_flip() +
   labs(title = "A) Effects on baseline viral density",
-       x = "", y = "Change in admission viral densities (log10 copies/mL)") +
+       x = "", y = "Change in baseline viral densities (log10 copies/mL)") +
   base_theme
 
 G_cov1
@@ -104,6 +104,11 @@ G_combined <- ggarrange(G_cov2, G_cov1,
 G_combined
 
 plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_covariate_effects.png"))
-png(plot_name, width = 8, height = 8, units = "in", res = 350)
+png(plot_name, width = 8, height = 10, units = "in", res = 350)
+print(G_combined)
+dev.off()
+
+plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_covariate_effects.pdf"))
+pdf(plot_name, width = 8, height = 10)
 print(G_combined)
 dev.off()
