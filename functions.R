@@ -650,7 +650,7 @@ plot_baseline_vl <- function(Baseline_data){
     scale_color_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
     scale_fill_manual(values = c("#EE4266", "#387ADF"), guide = "none") +
     xlab("") +
-    ylab("Admission viral densities\n(copies/mL)") +
+    ylab("Baseline viral densities\n(copies/mL)") +
     scale_x_discrete(labels = function(x) paste("Influenza", x)) +
     scale_y_continuous(labels = scales::math_format(10^.x), limits = c(0, 8)) +
     theme(
