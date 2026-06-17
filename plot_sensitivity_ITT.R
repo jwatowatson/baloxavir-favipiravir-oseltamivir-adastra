@@ -58,7 +58,7 @@ effect_ests_plots$lbl <- paste0(
 )
 
 ## Put mITT label above its CI, ITT label below its CI
-effect_ests_plots$lbl_vjust <- ifelse(effect_ests_plots$model == "mITT population", -0.9, 1.8)
+effect_ests_plots$lbl_vjust <- ifelse(effect_ests_plots$model == "mITT population", -1.5, 2.5)
 
 #Labeling reference arm
 lab_ref <- ref_arm
@@ -102,6 +102,11 @@ G <- ggplot(effect_ests_plots,
 G
 
 plot_name <- here("Plots", intervention, paste0( "sensitivity_trt_effect.png"))
-png(plot_name, width = 8, height = 6, units = "in", res = 350)
+png(plot_name, width = 8, height = 8, units = "in", res = 350)
+G
+dev.off()
+
+plot_name <- here("Plots", intervention, paste0( "sensitivity_trt_effect.pdf"))
+pdf(plot_name, width = 8, height = 8)
 G
 dev.off()
