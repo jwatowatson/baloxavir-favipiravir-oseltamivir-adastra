@@ -59,8 +59,8 @@ trt_order <-  c("Baloxavir", "Favipiravir", "Oseltamivir", "No Study Drug")
 ```{r load_data}
 intervention = 'Final'
 
-ref_arm = 'No Study Drug' # Success/futility
-#ref_arm = 'Baloxavir' # Non-inferiority
+#ref_arm = 'No Study Drug' # Success/futility
+ref_arm = 'Baloxavir' # Non-inferiority
 
 # depending on comparison with no study drug or positive control
 # will be used when plotting treatment efficacy CI wrt reference arm
@@ -71,7 +71,7 @@ if (ref_arm == 'No Study Drug') {
 }
 
 mITT_threshold <- 250
-use_threshold = F
+use_threshold = T
 ```
 
 ```{r define_population}
@@ -125,6 +125,13 @@ print(timeline)
 dev.off()
 ```
 
+```{r}
+plot_name <- here("Plots", intervention, paste0("timeline.pdf"))
+pdf(plot_name, width = 8, height = 6)
+print(timeline)
+dev.off()
+```
+
 ```{r mITT_plot}
 mITT_plot <- plot_mITT(adastra_dat)
 mITT_plot
@@ -133,6 +140,13 @@ mITT_plot
 ```{r}
 plot_name <- here("Plots", intervention, paste0("mITT_per_symptomOnset.png"))
 png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(mITT_plot)
+dev.off()
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("mITT_per_symptomOnset.pdf"))
+pdf(plot_name, width = 8, height = 6)
 print(mITT_plot)
 dev.off()
 ```
@@ -284,6 +298,13 @@ dev.off()
 ```
 
 ```{r}
+plot_name <- here("Plots", intervention, paste0("baseline_vl_fluType.pdf"))
+pdf(plot_name, width = 8, height = 6)
+print(G_baseline_vl)
+dev.off()
+```
+
+```{r}
 # Baseline viral load statistics, stratified by flu type
 Baseline_data %>%
   group_by(fluType) %>%
@@ -352,13 +373,6 @@ adastra_dat_diff <- adastra_dat_pairs %>%
   pivot_wider(names_from = swab_side, values_from = log10_viral_load) %>% mutate(diff_TLS_minus_RTS = TLS - RTS, 
           abs_diff = abs(diff_TLS_minus_RTS),
           mean_vl = (TLS + RTS) / 2)
-```
-
-```{r}
-plot_name <- here("Plots", intervention, paste0("mITT_per_symptomOnset.png"))
-png(plot_name, width = 8, height = 6, units = "in", res = 600)
-print(mITT_plot)
-dev.off()
 ```
 
 ```{r}
@@ -431,6 +445,13 @@ print(box_vl_flutype)
 dev.off()
 ```
 
+```{r}
+plot_name <- here("Plots", intervention, paste0("box_vl_fluType.pdf"))
+pdf(plot_name, width = 8, height = 6)
+print(box_vl_flutype)
+dev.off()
+```
+
 ```{r box_vl, warning=F}
 box_vl <- plot_vl_box(adastra_dat_analysis, trt_colors, fluType = F, trt_order)
 box_vl
@@ -439,6 +460,13 @@ box_vl
 ```{r}
 plot_name <- here("Plots", intervention, paste0("box_vl.png"))
 png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(box_vl)
+dev.off()
+```
+
+```{r}
+plot_name <- here("Plots", intervention, paste0("box_vl.pdf"))
+pdf(plot_name, width = 8, height = 6)
 print(box_vl)
 dev.off()
 ```
@@ -656,6 +684,13 @@ print(G_hl_flutype)
 dev.off()
 ```
 
+```{r}
+plot_name <- here("Plots", intervention, paste0("hl_fluType.pdf"))
+pdf(plot_name, width = 8, height = 6)
+print(G_hl_flutype)
+dev.off()
+```
+
 ## Plot treatment effects
 
 ```{r t12_trt}
@@ -667,7 +702,17 @@ G2
 if(ref_arm == "No Study Drug"){
   plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_nsd.png"))
 
-png(plot_name, width = 12, height = 6, units = "in", res = 600)
+png(plot_name, width = 14, height = 6, units = "in", res = 600)
+grid.arrange(G_hl, G2, ncol = 2)
+dev.off()
+}
+```
+
+```{r}
+if(ref_arm == "No Study Drug"){
+  plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_nsd.pdf"))
+
+pdf(plot_name, width = 14, height = 6)
 grid.arrange(G_hl, G2, ncol = 2)
 dev.off()
 }
@@ -678,6 +723,16 @@ if(ref_arm != "No Study Drug"){
   plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.png"))
 
 png(plot_name, width = 8, height = 6, units = "in", res = 600)
+print(G2) 
+dev.off()
+}
+```
+
+```{r}
+if(ref_arm != "No Study Drug"){
+  plot_name <- here("Plots", intervention, paste0("mITT_", mITT_threshold, "_esimated_effect_vs_positive_arm.pdf"))
+
+pdf(plot_name, width = 8, height = 6)
 print(G2) 
 dev.off()
 }
