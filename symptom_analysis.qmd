@@ -252,9 +252,11 @@ survplot_sympt <- survminer::ggsurvplot(fit,pval=F,
                                   size = 1.5,
                                   alpha = 0.7,
                                   xlim = c(0,28),
-                                risk.table.fontsize = 2,
+                                risk.table.fontsize = 3,
+                                tables.height = 0.4,
                                 risk.table.breaks = visit_days) 
-lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.2f", p_val)
+# lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.2f", p_val)
+lab <- if (p_val < 1e-3) sprintf("p-value < 0.001") else sprintf("p-value = %.2f", p_val)
 
 survplot_sympt$plot <- survplot_sympt$plot + 
   scale_x_continuous(breaks = visit_days) +
@@ -263,11 +265,11 @@ survplot_sympt$plot <- survplot_sympt$plot +
   xlab("Time since randomisation (days)") +
   ylab("Proportion of patients with symptoms") +
  theme(
-        axis.title=element_text(face="bold",),
+        axis.title=element_text(size = 12, face="bold",),
         strip.text = element_text(face = "bold"),
-        title = element_blank()
+        plot.title = element_text(size = 12, face = "bold")
   ) +
-  ggtitle("B) Symptom resolution") +
+  #ggtitle("B) Symptom resolution") +
   annotate("text", x = 0, y = 0.1, label = paste0("p-value = ", round(p_val,2)), vjust=0, hjust = 0)
 ```
 
@@ -277,15 +279,15 @@ xlabel <- "Time since randomisation (days)"
 
 survplot_sympt$table <- survplot_sympt$table + 
   scale_x_continuous(breaks = visit_days, limits = c(0, 28)) +
-                    xlab(xlabel) + theme(axis.title.x = element_text(face = "bold"),
-                         plot.title = element_text(size = 14))
+                    xlab(xlabel) + theme(axis.title.x = element_text(size = 12, face = "bold"),
+                         plot.title = element_text(size = 12))
 survplot_sympt
 ```
 
 ```{r}
 fname <- paste0(here("Plots", intervention, "symptom_surv_plot_28days.pdf"))
 
-pdf(fname, width = 6, height = 8)
+pdf(fname, width = 8, height = 6)
 print(survplot_sympt, newpage=F)
 dev.off()
 ```
@@ -294,7 +296,7 @@ dev.off()
 fname <- here("Plots", intervention,
               "symptom_surv_plot_28days.png")
 
-png(fname, width = 6, height = 6, units = "in", res = 600)
+png(fname, width = 8, height = 6, units = "in", res = 600)
 print(survplot_sympt, newpage = FALSE)
 dev.off()
 ```
