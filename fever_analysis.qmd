@@ -103,6 +103,7 @@ table(adastra_dat$Fever_Baseline, adastra_dat$Trt)
 temp_dat_for_plot <- cal_fever_clearance(temp_dat, threshold, window_clear)
 summary_temp_values = temp_dat_for_plot %>% distinct(Label, .keep_all = T)
 
+table(summary_temp_values$Fever_Baseline, summary_temp_values$Trt)
 # temp_dat_for_plot$Trt <- as.factor(temp_dat_for_plot$Trt)
 # temp_dat_for_plot$Trt <- factor(temp_dat_for_plot$Trt, levels = c(ref_arm, trts))
 ```
@@ -147,6 +148,11 @@ hr_tab
 ```
 
 ```{r}
+# Pairwise log-rank p-value
+pairwise_survdiff(Surv(clearance_time, clearance_time_cens) ~ Trt, data = summary_temp_values)
+```
+
+```{r}
 rmean_table <- summary(fit)$table %>% as.data.frame()
 rmean_table$strata <- row.names(rmean_table)
 rmean_table %>%
@@ -185,7 +191,7 @@ cols <- as.character(cols)
 
 ```{r fever_clearance}
 survplot_fever <- survminer::ggsurvplot(fit,pval=F,
-                                  risk.table = T,
+                                  risk.table = "nrisk_cumcensor",
                                   risk.table.y.text=F,
                                   palette = cols,
                                   ggtheme = theme_bw(base_size = 16),
@@ -196,7 +202,8 @@ survplot_fever <- survminer::ggsurvplot(fit,pval=F,
                                   size = 1.5,
                                   alpha = 0.7,
                                   xlim = c(0,7)) 
-lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.2f", p_val)
+# lab <- if (p_val < 1e-3) sprintf("p-value = %.0e", p_val) else sprintf("p-value = %.2f", p_val)
+lab <- if (p_val < 1e-3) sprintf("p-value < 0.001") else sprintf("p-value = %.2f", p_val)
 
 survplot_fever$plot <- survplot_fever$plot + 
   geom_hline(yintercept = c(0,1), linetype = "dashed", linewidth = 0.6) +
@@ -216,6 +223,7 @@ survplot_fever$plot <- survplot_fever$plot +
 xlabel <- "Time since randomisation (days)"
 
 survplot_fever$table <- survplot_fever$table +
+                    labs(title = "Number at risk (number censored)") +
                     xlab(xlabel) +
                     theme(axis.title.x = element_text(face = "bold"),
                          plot.title = element_text(size = 14))
@@ -225,7 +233,7 @@ survplot_fever
 ```{r}
 fname <- paste0(here("Plots", intervention, "Temp_surv_plot.pdf"))
 
-pdf(fname, width = 6, height = 6)
+pdf(fname, width = 8, height = 6)
 print(survplot_fever, newpage = F)
 dev.off()
 ```
@@ -276,7 +284,15 @@ grob2 <- arrangeGrob(survplot_sympt$plot, survplot_sympt$table, ncol = 1, height
 ```{r}
 fname <- paste0(here("Plots", intervention, "fever_symptom_surv_plot_28days.png"))
 
-png(fname, width = 13, height = 7, unit = 'in', res = 350)
+png(fname, width = 16, height = 8, unit = 'in', res = 600)
+print(ggarrange(grob1, grob2, ncol = 2, nrow = 1))
+dev.off()
+```
+
+```{r}
+fname <- paste0(here("Plots", intervention, "fever_symptom_surv_plot_28days.pdf"))
+
+pdf(fname, width = 16, height = 8)
 print(ggarrange(grob1, grob2, ncol = 2, nrow = 1))
 dev.off()
 ```
